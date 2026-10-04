@@ -1,6 +1,7 @@
 /* Lab Guide: pick a lab, start it (reverts the server to the lab's start point), watch objectives tick off, and go back
  * to an earlier step (WS.labs.snapshots) after a mistake: "Go back to here" on a completed step, or Undo... for the list.
- * WS.labGuide.goBack(id, { confirm }) and undoDialog({ onCreate }) are what the buttons call (tests use them). */
+ * WS.labGuide.goBack(id, { confirm }) and undoDialog({ onCreate }) are what the buttons call (tests use them).
+ * Next lab starts the lab after the active one in the list (WS.labGuide.nextLab(id)), with the usual confirmation. */
 (function () {
   'use strict';
   const WS = window.WS;
@@ -48,8 +49,11 @@
             hint)));
       });
       root.appendChild(list);
-      if (p.doneCount === p.total) root.appendChild(h('div.lab-complete', 'Lab complete. Nice work!'));
-      root.appendChild(h('div.lab-actions',
+      const complete = p.doneCount === p.total;
+      if (complete) root.appendChild(h('div.lab-complete', 'Lab complete. Nice work!'));
+      const next = nextLab(p.lab.id);
+      root.appendChild(h('div.lab-actions.lab-run',
+        next ? h('button.btn' + (complete ? '.primary' : ''), { dataset: { action: 'next-lab' }, title: `Start ${next.title}`, onClick: () => startLab(next) }, 'Next lab') : null,
         h('button.btn', { disabled: snaps.length < 1, title: 'Go back to the start of the lab or to an earlier step', onClick: () => undoDialog() }, 'Undo…'),
         h('button.btn', { onClick: async () => {
           const r = await WS.ui.msgbox({ title: 'Restart lab', icon: 'warning', message: 'Revert the server to the start of this lab?', detail: 'All changes made since the lab started will be lost. The server will restart.', buttons: ['Revert', 'Cancel'] });
@@ -97,6 +101,12 @@
     return win;
   }
 
+  /** The lab after this one in the Lab Guide's list (the built-in labs in order, then imported ones), or null after the last. */
+  function nextLab(id) {
+    const all = WS.labs.list(), i = all.findIndex(l => l.id === id);
+    return i >= 0 ? all[i + 1] || null : null;
+  }
+
   /* ---------------------------------------------------------------- going back to a step */
   /** What reverting to a snapshot undoes: the objectives completed after it. */
   function lostSteps(x) {
@@ -136,7 +146,7 @@
     return WS.ui.dialog({ title: 'Go back to a step', width: 460, className: 'w32-dlg', content, buttons: [{ label: 'Close', primary: true, cancel: true }],
       onCreate: f => { frame = f; if (o.onCreate) o.onCreate({ frame, list: lv, go }); } });
   }
-  WS.labGuide = { goBack, undoDialog };
+  WS.labGuide = { goBack, undoDialog, nextLab };
 
   WS.apps.register({ id: 'lab', name: 'Lab Guide', icon: I.lab, singleton: true, launch });
 })();

@@ -1,6 +1,6 @@
 /* Built-in labs: each setup gives the documented starting point, no objective starts complete, and the commands
  * in the hints complete every objective, and the Undo step snapshots. Use a fresh profile (it rewrites the lab state).
- * &shot=goback (Lab Guide with Go back links) or &shot=undo (the Go back confirmation over Undo...) stops there. */
+ * &shot=goback (Lab Guide with Go back links), &shot=nextlab (its buttons) or &shot=undo (the Go back confirmation over Undo...) stops there. */
 (async function () {
   'use strict';
   const WS = window.WS, L = WS.labs;
@@ -348,6 +348,15 @@
     G.remove(dm);
     t('Undo: the mistake leaves the latched objectives done', !G.get('Drive Mappings') && open().join() === 'archive,apply', open());
     const lg = WS.apps.launch('lab'); await wait(120);
+    const nextBtn = lg.el.querySelector('[data-action="next-lab"]');
+    t('Lab Guide: Next lab starts the following lab (not primary until the lab is complete)', nextBtn && nextBtn.title === 'Start Lab 17: Drive letters and mount points' && !nextBtn.classList.contains('primary'), nextBtn && nextBtn.title);
+    nextBtn.scrollIntoView({ block: 'end' });
+    if (shotAt('nextlab')) { document.querySelectorAll('.toast').forEach(x => x.remove()); return; }
+    nextBtn.click(); await wait(80);
+    t('Next lab asks first, like Start lab', shadeL().textContent.includes('Start “Lab 17: Drive letters and mount points”?'), shadeL().textContent.slice(0, 200));
+    [...shadeL().querySelectorAll('button')].find(b => b.textContent === 'Cancel').click(); await wait(60);
+    t('Cancel keeps the current lab', L.progress().lab.id === 'lab16-drive-maps');
+    t('the next lab follows the list order (skipping missing numbers), none after the last', WS.labGuide.nextLab('lab07-iis').id === 'lab09-services-events' && WS.labGuide.nextLab('lab01-initial-config').id === 'lab02-adds-forest' && WS.labGuide.nextLab('lab18-storage-spaces') === null);
     const backLinks = [...lg.el.querySelectorAll('.lab-back')];
     t('Lab Guide: "Go back to here" on each completed step and an Undo… button', backLinks.length === 4 && [...lg.el.querySelectorAll('button')].some(b => b.textContent === 'Undo…'), backLinks.length);
     if (shotAt('goback')) return;
