@@ -1,0 +1,21 @@
+{
+  "id": "custom-rename-web01",
+  "title": "Custom: Prepare a web server",
+  "difficulty": "Beginner",
+  "minutes": 5,
+  "description": "Example of an importable lab. Open Lab Guide > Import lab file... and choose this file.",
+  "setup": { "set": { "system.computerName": "WIN-NEWSRV0042X", "system.workgroup": "WORKGROUP" } },
+  "objectives": [
+    {
+      "id": "name",
+      "text": "Rename the server to WEB01 and restart it.",
+      "hint": "Server Manager > Local Server > Computer name.",
+      "check": { "path": "system.computerName", "equalsIgnoreCase": "WEB01" }
+    },
+    {
+      "id": "wg",
+      "text": "Join the workgroup WEBFARM.",
+      "check": { "path": "system.workgroup", "equalsIgnoreCase": "WEBFARM" }
+    }
+  ]
+}

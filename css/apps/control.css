@@ -1,0 +1,51 @@
+/* Control Panel home, category pages, All items, Windows Tools, User Accounts; Programs and Features. The shared
+ * .cp-* frame (address bar, nav, links) is in wf.css. */
+.cpl-bar { display: flex; align-items: center; gap: 10px; }
+.cpl-bar .cp-crumbs { flex: 1; }
+.cpl-crumb { cursor: default; }
+.cpl-crumb:hover { text-decoration: underline; }
+.cpl-searchbox { position: relative; width: 230px; }
+.cpl-search { width: 100%; height: 24px; border: 1px solid #d9d9d9; padding: 0 24px 0 6px; font-size: 12px; outline: 0; }
+.cpl-searchbox span { position: absolute; right: 6px; top: 5px; width: 14px; height: 14px; color: #555; }
+.cpl-searchbox svg { width: 14px; height: 14px; display: block; }
+.cpl-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.cpl-viewby { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.cpl-cats { display: grid; grid-template-columns: repeat(2, minmax(260px, 380px)); gap: 22px 40px; padding-left: 20px; }
+.cpl-cat, .cpl-sec { display: flex; gap: 14px; align-items: flex-start; }
+.cpl-cicon svg { width: 44px; height: 44px; display: block; }
+.cpl-ctitle { font-size: 16px; color: #1e7e34; text-decoration: none; display: inline-block; margin-bottom: 4px; }
+.cpl-ctitle:hover { text-decoration: underline; color: #0b5cad; }
+.cpl-cat .cp-link, .cpl-seclinks .cp-link { font-size: 12px; margin: 2px 0; }
+.cpl-sections { display: flex; flex-direction: column; gap: 18px; }
+.cpl-sec { padding-bottom: 14px; border-bottom: 1px solid #ececec; }
+.cpl-seclinks { display: flex; flex-wrap: wrap; gap: 2px 16px; }
+.cpl-seclinks .cp-link { display: inline-flex; }
+.cpl-navcur { font-weight: 600; margin: 4px 0; }
+.cpl-items { display: grid; gap: 4px 18px; }
+.cpl-items.large { grid-template-columns: repeat(3, minmax(200px, 1fr)); }
+.cpl-items.small { grid-template-columns: repeat(4, minmax(170px, 1fr)); }
+.cpl-item { display: flex; align-items: center; gap: 10px; padding: 4px 6px; color: #0b5cad; text-decoration: none; border: 1px solid transparent; border-radius: 2px; }
+.cpl-item:hover { background: #e5f3ff; border-color: #cce8ff; }
+.cpl-items.large .cpl-item svg { width: 32px; height: 32px; display: block; }
+.cpl-items.small .cpl-item svg { width: 16px; height: 16px; display: block; }
+.cpl-tools { display: grid; grid-template-columns: repeat(4, minmax(170px, 1fr)); gap: 6px 18px; }
+.cpl-tool { display: flex; align-items: center; gap: 10px; padding: 6px; color: #1b1b1b; text-decoration: none; border: 1px solid transparent; border-radius: 2px; font-size: 12px; }
+.cpl-tool:hover { background: #e5f3ff; border-color: #cce8ff; }
+.cpl-tool svg { width: 32px; height: 32px; display: block; flex: none; }
+.cpl-ua { display: flex; gap: 40px; align-items: flex-start; }
+.cpl-ualinks { display: flex; flex-direction: column; gap: 6px; }
+.cpl-uacard { display: flex; gap: 14px; align-items: center; }
+.cpl-uacard b { font-size: 15px; }
+.cpl-uaav { width: 64px; height: 64px; border-radius: 4px; background: #d9d9d9; display: grid; place-items: center; }
+.cpl-uaav svg { width: 44px; height: 44px; }
+/* Programs and Features */
+.aw-main { display: flex; flex-direction: column; }
+.aw-main > p { margin: 0 0 10px; }
+.aw-toolbar { display: flex; gap: 2px; height: 30px; align-items: center; padding: 0 4px; background: linear-gradient(#f9fbfd, #eef3f8); border: 1px solid #dbe4ee; border-bottom: 0; }
+.aw-tb { height: 24px; border: 1px solid transparent; background: transparent; padding: 0 10px; font-size: 12px; border-radius: 2px; }
+.aw-tb:hover:not(:disabled) { background: #e5f3ff; border-color: #cce8ff; }
+.aw-tb:disabled { color: #8a8a8a; }
+.aw-list { flex: 1; min-height: 200px; display: flex; flex-direction: column; border: 1px solid #dbe4ee; }
+.aw-list > * { flex: 1; min-height: 0; }
+.aw-foot { display: flex; gap: 12px; align-items: center; padding: 10px 6px 0; font-size: 12px; color: #333; }
+.aw-foot svg { width: 36px; height: 36px; display: block; }

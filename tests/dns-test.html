@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DNS Manager Tests</title>
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/ui.css">
+<link rel="stylesheet" href="../css/shell.css">
+<link rel="stylesheet" href="../css/apps/aduc.css">
+<link rel="stylesheet" href="../css/apps/dnsmgmt.css">
+<link rel="stylesheet" href="../css/apps/dhcpmgmt.css">
+<link rel="stylesheet" href="../css/apps/diskmgmt.css">
+<link rel="stylesheet" href="../css/apps/compmgmt.css">
+<link rel="stylesheet" href="../css/apps/wf.css">
+<link rel="stylesheet" href="../css/apps/ncpa.css">
+<link rel="stylesheet" href="../css/apps/explorer.css">
+<link rel="stylesheet" href="../css/apps/eventvwr.css">
+<link rel="stylesheet" href="../css/apps/servermanager.css">
+<link rel="stylesheet" href="../css/apps/gpmc.css">
+<link rel="stylesheet" href="../css/apps/taskmgr.css">
+<link rel="stylesheet" href="../css/apps/settings.css">
+<link rel="stylesheet" href="../css/apps/control.css">
+<link rel="stylesheet" href="../css/apps/edge.css">
+<link rel="stylesheet" href="../css/apps/inetmgr.css">
+<link rel="stylesheet" href="../css/apps/virtmgmt.css">
+<link rel="stylesheet" href="../css/apps/terminal.css?v=20261001-selection3">
+</head>
+<body>
+<div id="screen">
+  <div id="desktop">
+    <div id="wallpaper"></div>
+    <div id="desktop-icons"></div>
+    <div id="watermark"></div>
+    <div id="windows"></div>
+  </div>
+  <div id="taskbar"></div>
+  <div id="flyouts"></div>
+  <div id="overlays"></div>
+</div>
+
+<!-- core -->
+<script src="../js/core/util.js"></script>
+<script src="../js/core/state.js"></script>
+<script src="../js/core/icons.js"></script>
+<!-- model -->
+<script src="../js/model/catalog.js"></script>
+<script src="../js/model/system.js"></script>
+<script src="../js/model/events.js"></script>
+<script src="../js/model/features.js"></script>
+<script src="../js/model/services.js"></script>
+<script src="../js/model/network.js"></script>
+<script src="../js/model/security.js"></script>
+<script src="../js/model/fs.js"></script>
+<script src="../js/model/storage.js"></script>
+<script src="../js/model/dns.js"></script>
+<script src="../js/model/dhcp.js"></script>
+<script src="../js/model/ad.js"></script>
+<script src="../js/model/gpo-catalog.js"></script>
+<script src="../js/model/gpo.js"></script>
+<script src="../js/model/gpo-report.js"></script>
+<script src="../js/model/gpp.js"></script>
+<script src="../js/model/processes.js"></script>
+<script src="../js/model/personal.js"></script>
+<script src="../js/model/updates.js"></script>
+<script src="../js/model/programs.js"></script>
+<script src="../js/model/iis.js"></script>
+<script src="../js/model/hyperv.js"></script>
+<!-- lab engine + built-in labs (add new lab scripts here) -->
+<script src="../js/core/labs.js"></script>
+<script src="../labs/fixtures.js"></script>
+<script src="../labs/lab01-initial-config.js"></script>
+<script src="../labs/lab02-adds-forest.js"></script>
+<script src="../labs/lab03-ad-objects.js"></script>
+<script src="../labs/lab04-dns.js"></script>
+<script src="../labs/lab05-dhcp.js"></script>
+<script src="../labs/lab06-storage-shares.js"></script>
+<script src="../labs/lab07-iis.js"></script>
+<script src="../labs/lab09-services-events.js"></script>
+<script src="../labs/lab11-firewall.js"></script>
+<script src="../labs/lab12-file-server.js"></script>
+<script src="../labs/lab13-group-policy.js"></script>
+<script src="../labs/lab14-task-manager.js"></script>
+<script src="../labs/lab15-hyperv.js"></script>
+<script src="../labs/lab16-drive-maps.js"></script>
+<!-- window manager + shell -->
+<script src="../js/core/wm.js"></script>
+<script src="../js/core/snap.js"></script>
+<script src="../js/core/ui.js"></script>
+<script src="../js/core/ui-views.js"></script>
+<script src="../js/core/ui-sheets.js"></script>
+<script src="../js/core/ui-pickers.js"></script>
+<script src="../js/core/mmc.js"></script>
+<script src="../js/shell/shell.js"></script>
+<script src="../js/shell/shell-dialogs.js"></script>
+<script src="../js/shell/flyouts.js"></script>
+<script src="../js/shell/hostbar.js"></script>
+<!-- terminal engines -->
+<script src="../js/term/console.js?v=20261001-selection3"></script>
+<script src="../js/term/ps-parser.js"></script>
+<script src="../js/term/ps-runtime.js"></script>
+<script src="../js/term/ps-format.js"></script>
+<script src="../js/term/natives.js"></script>
+<script src="../js/term/cmd.js"></script>
+<script src="../js/term/ps-cmdlets-core.js"></script>
+<script src="../js/term/ps-cmdlets-net.js"></script>
+<script src="../js/term/ps-cmdlets-ad.js"></script>
+<script src="../js/term/ps-cmdlets-gp.js"></script>
+<script src="../js/term/ps-cmdlets-iis.js"></script>
+<script src="../js/term/ps-cmdlets-hv.js"></script>
+<script src="../js/term/sconfig.js"></script>
+<!-- apps -->
+<script src="../js/apps/servermanager.js"></script>
+<script src="../js/apps/sm-roles-wizard.js"></script>
+<script src="../js/apps/sm-adds-wizard.js"></script>
+<script src="../js/apps/sm-dhcp-wizard.js"></script>
+<script src="../js/apps/sm-fss.js"></script>
+<script src="../js/apps/cpl.js"></script>
+<script src="../js/apps/labguide.js"></script>
+<script src="../js/apps/services.js"></script>
+<script src="../js/apps/aduc.js"></script>
+<script src="../js/apps/aduc-properties.js"></script>
+<script src="../js/apps/eventvwr.js"></script>
+<script src="../js/apps/dnsmgmt.js"></script>
+<script src="../js/apps/dhcpmgmt.js"></script>
+<script src="../js/apps/diskmgmt.js"></script>
+<script src="../js/apps/fsmgmt.js"></script>
+<script src="../js/apps/lusrmgr.js"></script>
+<script src="../js/apps/compmgmt.js"></script>
+<script src="../js/apps/wf.js"></script>
+<script src="../js/apps/firewallcpl.js"></script>
+<script src="../js/apps/ncpa.js"></script>
+<script src="../js/apps/explorer.js"></script>
+<script src="../js/apps/notepad.js"></script>
+<script src="../js/apps/gpmc.js"></script>
+<script src="../js/apps/gpme.js"></script>
+<script src="../js/apps/gpme-prefs.js"></script>
+<script src="../js/apps/taskmgr.js"></script>
+<script src="../js/apps/settings.js"></script>
+<script src="../js/apps/control.js"></script>
+<script src="../js/apps/edge.js"></script>
+<script src="../js/apps/inetmgr.js"></script>
+<script src="../js/apps/virtmgmt.js"></script>
+<script src="../js/apps/vmconnect.js"></script>
+<script src="../js/apps/terminal.js"></script>
+<script src="../js/main.js"></script>
+<!-- DNS Manager test: open with ?quick=1 in a throwaway browser profile (it rewrites the lab state) -->
+<script src="dns-test.js"></script>
+</body>
+</html>

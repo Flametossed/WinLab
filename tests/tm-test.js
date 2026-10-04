@@ -1,0 +1,387 @@
+/* Task Manager and the process model (WS.proc): the model, tasklist/taskkill, Get-/Stop-/Start-Process, CIM,
+ * the Task Manager pages and dialogs, explorer.exe restarts and the bug check. Use a fresh profile.
+ * &shot=processes|expanded|details|priority|affinity|dump|services|startup|users|performance|memory|logical|settings|run|critical|bsod */
+(async function () {
+  'use strict';
+  const WS = window.WS, P = WS.proc;
+  let pass = 0, fail = 0;
+  const t = (name, ok, detail) => { ok ? pass++ : fail++; console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${!ok && detail !== undefined ? ' :: ' + JSON.stringify(detail) : ''}`); };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, ms = 3000) => { for (let i = 0; i < ms / 50; i++) { if (fn()) return true; await wait(50); } return !!fn(); };
+  const shade = () => [...document.querySelectorAll('#dialogs .dlg-shade')].pop();
+  const dlgText = () => (shade() ? shade().textContent : '');
+  const title = () => (shade() ? shade().querySelector('.dlg-ttext').textContent : '');
+  const button = (label, scope = shade()) => scope && [...scope.querySelectorAll('button')].find(x => x.textContent.trim() === label);
+  const click = async (label, scope) => { const b = button(label, scope); if (!b) throw new Error('Missing button: ' + label + ' in ' + (scope || shade() || {}).textContent); b.click(); await wait(80); };
+  const shot = name => { if (new URLSearchParams(location.search).get('shot') !== name) return false; console.log(`RESULT ${pass} passed, ${fail} failed`); return true; };
+  const item = (items, name) => { const it = items.find(x => x && x.label && WS.ui.plain(x.label) === name); if (!it) throw new Error('Missing menu item: ' + name + ' in ' + items.filter(Boolean).map(x => x.label).join('|')); return it; };
+  const ps = new WS.ps.Session({ console: new WS.term.TextConsole() });
+  const run = async cmd => { const io = ps.console; io.clear(); await ps.execute(cmd); return io.text(); };
+  const cmdc = new WS.term.TextConsole(), cmd = new WS.term.CmdSession({ console: cmdc });
+  const crun = async line => { cmdc.clear(); await cmd.execute(line); return cmdc.text(); };
+  const byImage = n => P.list().filter(p => p.image.toLowerCase() === n.toLowerCase());
+  const one = n => byImage(n)[0];
+  WS.svc.timeScale = 0.004; // recovery restarts after 60000 ms happen in about a quarter of a second
+  try {
+    await wait(300);
+    /* ---------------- the model ---------------- */
+    const list = P.list();
+    t('the core processes run with their real PIDs and parents', one('System').pid === 4 && list.some(p => p.pid === 0 && p.image === 'System Idle Process') && byImage('csrss.exe').length === 2 && !!one('wininit.exe') && one('services.exe').ppid === one('wininit.exe').pid && one('lsass.exe').ppid === one('wininit.exe').pid);
+    t('every PID is unique and a multiple of 4', new Set(list.map(p => p.pid)).size === list.length && list.every(p => p.pid % 4 === 0));
+    t('the session runs explorer.exe, sihost, Start and Search as Administrator', ['explorer.exe', 'sihost.exe', 'StartMenuExperienceHost.exe', 'SearchHost.exe'].every(n => one(n) && one(n).user === 'Administrator' && one(n).session === 1) && one('SearchHost.exe').status === 'Suspended');
+    const dnsHost = list.find(p => p.services.includes('Dnscache'));
+    t('one svchost.exe per service, run by the service account', dnsHost.image === 'svchost.exe' && dnsHost.services.length === 1 && dnsHost.user === 'NETWORK SERVICE' && dnsHost.ppid === one('services.exe').pid && /-k NetworkService/.test(dnsHost.cmdLine));
+    t('lsass.exe hosts SamSs and KeyIso; spoolsv.exe runs Print Spooler', one('lsass.exe').services.includes('SamSs') && one('lsass.exe').services.includes('KeyIso') && one('spoolsv.exe').services[0] === 'Spooler' && P.pidOfService('Spooler') === one('spoolsv.exe').pid);
+    t('Server Manager and Lab Guide windows are processes', !!list.find(p => p.appId === 'servermanager' && p.image === 'ServerManager.exe') && P.pidOfService('NoSuchService') === 0);
+    t('the startup app Windows Security notification icon is running', P.startupApps().length === 1 && !!one('SecurityHealthSystray.exe'));
+    const spool1 = one('spoolsv.exe').pid;
+    WS.svc.stop('Spooler'); t('stopping a service ends its process', !one('spoolsv.exe'));
+    WS.svc.start('Spooler'); t('starting it again gives a new PID', one('spoolsv.exe') && one('spoolsv.exe').pid !== spool1);
+    const n1 = WS.apps.launch('notepad'); await wait(50);
+    const np = one('notepad.exe');
+    t('a Notepad window is notepad.exe under explorer.exe', np && np.windows[0] === n1 && np.ppid === one('explorer.exe').pid && np.kind === 'app');
+    t('killing notepad.exe closes its window', P.kill(np.pid, {}).ok && !WS.wm.windows.includes(n1) && !one('notepad.exe'));
+    const term = WS.apps.launch('terminal'); await wait(120);
+    const tabProc = list => list.find(p => p.tab && p.image === 'powershell.exe');
+    const tp = tabProc(P.list());
+    t('Windows Terminal runs powershell.exe and OpenConsole.exe per tab; $PID matches', one('WindowsTerminal.exe') && tp && tp.ppid === one('WindowsTerminal.exe').pid && !!one('OpenConsole.exe') && term.terminal.tabs[0].session.getVar('PID') === tp.pid, { tp: tp && [tp.pid, tp.ppid], wt: one('WindowsTerminal.exe') && one('WindowsTerminal.exe').pid, oc: !!one('OpenConsole.exe'), pid: term.terminal.tabs[0].session.getVar('PID') });
+    term.terminal.add('cmd'); await wait(100);
+    const cmdProc = P.list().find(p => p.tab && p.image === 'cmd.exe');
+    t('a CMD tab is cmd.exe; ending it closes the tab only', cmdProc && P.kill(cmdProc.pid, {}).ok && term.terminal.tabs.length === 1 && WS.wm.windows.includes(term));
+    term.close(); await wait(30);
+    // services' processes: unexpected termination and recovery
+    const before = WS.state.events.logs.System.length;
+    const dh = P.list().find(p => p.services.includes('Dnscache'));
+    const kr = P.kill(dh.pid, {});
+    const ev = WS.state.events.logs.System.slice(before).find(e => e.id === 7031);
+    t('ending a service host stops the service and logs 7031 with the restart', kr.ok && !WS.svc.isRunning('Dnscache') && ev && /The DNS Client service terminated unexpectedly\.  It has done this 1 time\(s\)\.  The following corrective action will be taken in 60000 milliseconds: Restart the service\./.test(ev.message));
+    t('the Service Control Manager restarts it (new PID)', await until(() => WS.svc.isRunning('Dnscache')) && P.pidOfService('Dnscache') !== dh.pid && P.pidOfService('Dnscache') > 0);
+    const w32 = P.list().find(p => p.services.includes('W32Time'));
+    P.kill(w32.pid, {});
+    t('a trigger-start service has no recovery action: 7034', WS.state.events.logs.System.slice(-3).some(e => e.id === 7034 && /The Windows Time service terminated unexpectedly\.  It has done this 1 time\(s\)\.$/.test(e.message)));
+    await wait(300);
+    t('and it stays stopped', !WS.svc.isRunning('W32Time'));
+    WS.svc.start('W32Time');
+    t('lsass.exe is critical but not LSA-protected on a server', one('lsass.exe').critical && !one('lsass.exe').protected);
+    t('System, protected processes and Defender refuse to end', P.kill(4, {}).code === 'AccessDenied' && P.kill(one('csrss.exe').pid, {}).code === 'AccessDenied' && P.kill(one('MsMpEng.exe').pid, {}).code === 'AccessDenied' && P.kill(99999, {}).code === 'NotFound');
+    const dwm = one('dwm.exe').pid;
+    t('ending dwm.exe: winlogon starts a new one', P.kill(dwm, {}).ok && one('dwm.exe') && one('dwm.exe').pid !== dwm);
+    // priority, affinity, efficiency mode, dumps
+    const sm = P.list().find(p => p.appId === 'servermanager');
+    t('priority: High, by label and name; Realtime base 24', P.setPriority(sm.pid, 'High').ok && P.get(sm.pid).priority === 'High' && P.setPriority(sm.pid, 'Below normal').ok && P.get(sm.pid).priority === 'BelowNormal' && P.PRIORITIES.Realtime.base === 24);
+    t('priority: bad values and protected processes fail', P.setPriority(sm.pid, 'Turbo').code === 'InvalidValue' && P.setPriority(one('csrss.exe').pid, 'High').code === 'AccessDenied');
+    t('affinity: CPU 0 and 2 only; none is refused', P.setAffinity(sm.pid, 5).ok && P.get(sm.pid).affinity === 5 && P.setAffinity(sm.pid, 0).code === 'InvalidValue');
+    t('efficiency mode: Low priority, not for Windows processes', P.setEfficiency(sm.pid, true).ok && P.get(sm.pid).efficiency && P.get(sm.pid).priority === 'Idle' && !P.setEfficiency(one('services.exe').pid, true).ok);
+    P.setEfficiency(sm.pid, false); P.setPriority(sm.pid, 'Normal'); P.setAffinity(sm.pid, 15);
+    const d1 = P.dump(sm.pid), d2 = P.dump(sm.pid);
+    t('memory dumps go to %TEMP% as <name>.DMP, then <name> (2).DMP', d1.ok && d1.path === 'C:\\Users\\Administrator\\AppData\\Local\\Temp\\ServerManager.DMP' && d2.path.endsWith('ServerManager (2).DMP') && WS.fs.stat(d1.path).size > 100e6 && d1.shortPath.includes('ADMINI~1'));
+    t('a protected process cannot be dumped', P.dump(one('csrss.exe').pid).code === 'AccessDenied');
+    // live numbers
+    const tot = P.sample();
+    t('totals: CPU %, 4 GB memory, threads and handles', tot.cpu >= 0 && tot.cpu < 30 && tot.memory.totalKB === 4193780 && tot.memory.usedKB > 900000 && tot.memory.usedKB < tot.memory.totalKB && tot.threads > 300 && tot.processes === P.list().length - 1);
+    t('System Idle Process shows the idle CPU', Math.abs(P.live(P.get(0)).cpu - (100 - tot.cpu)) < 0.01);
+    // startup apps take effect at the next sign-in
+    P.setStartupEnabled('Windows Security notification icon', false);
+    t('disabling a startup app leaves it running until the next sign-in', P.startupApps()[0].enabled === false && !!one('SecurityHealthSystray.exe'));
+    P.onLogoff(); P.onLogon();
+    t('after signing in again it does not start', !one('SecurityHealthSystray.exe') && !!one('explorer.exe'));
+    P.setStartupEnabled('securityhealth', true);
+    t('unknown startup apps are NotFound', P.setStartupEnabled('nope', true).code === 'NotFound');
+
+    /* ---------------- tasklist / taskkill / sc ---------------- */
+    let o = await crun('tasklist');
+    t('tasklist: the real header, System Idle Process first, PIDs and memory', /Image Name\s+PID Session Name\s+Session#\s+Mem Usage\n=+ =+ =+ =+ =+/.test(o) && /\nSystem Idle Process\s+0 Services\s+0\s+8 K\n/.test(o) && /\nSystem\s+4 Services/.test(o) && /explorer\.exe\s+\d+ Console\s+1\s+[\d,]+ K/.test(o), o.slice(0, 400));
+    o = await crun('tasklist /svc /fi "imagename eq lsass.exe"');
+    t('tasklist /svc /fi: lsass.exe with its services', /lsass\.exe\s+\d+ .*SamSs/.test(o) && o.trim().split('\n').length === 3, o);
+    o = await crun('tasklist /fi "pid eq 99999"');
+    t('tasklist with no match: INFO line', o.trim() === 'INFO: No tasks are running which match the specified criteria.', o);
+    o = await crun('tasklist /fo csv /fi "imagename eq services.exe"');
+    t('tasklist /fo csv', o.includes('"Image Name","PID","Session Name","Session#","Mem Usage"') && /"services\.exe","\d+","Services","0","[\d,]+ K"/.test(o), o);
+    o = await crun('tasklist /v /fi "imagename eq dwm.exe" /fo list');
+    t('tasklist /v /fo list: status, user name and CPU time', /Status:\s+Running/.test(o) && /User Name:\s+Window Manager\\DWM-1/.test(o) && /CPU Time:\s+\d+:\d\d:\d\d/.test(o), o);
+    t('tasklist /svc /v together is a syntax error', (await crun('tasklist /svc /v')).includes('ERROR: Invalid syntax. /SVC and /V cannot be used together.'));
+    WS.apps.launch('notepad'); await wait(40);
+    let npid = one('notepad.exe').pid;
+    o = await crun('taskkill /im notepad.exe');
+    t('taskkill without /F asks the window to close', o.trim() === `SUCCESS: Sent termination signal to the process "notepad.exe" with PID ${npid}.` && (await until(() => !one('notepad.exe'))), o);
+    o = await crun('taskkill /im spoolsv.exe');
+    t('a windowless process needs /F', o.includes('could not be terminated.') && o.includes('Reason: This process can only be terminated forcefully (with /F option).') && WS.svc.isRunning('Spooler'), o);
+    const sp = one('spoolsv.exe').pid;
+    o = await crun('taskkill /im spoolsv.exe /f');
+    t('taskkill /f ends it and the Spooler restarts', o.trim() === `SUCCESS: The process "spoolsv.exe" with PID ${sp} has been terminated.` && (await until(() => WS.svc.isRunning('Spooler'))), o);
+    o = await crun('taskkill /pid 4 /f');
+    t('taskkill /pid 4: Access is denied', o.trim() === 'ERROR: The process with PID 4 could not be terminated.\nReason: Access is denied.', o);
+    t('taskkill: unknown image and PID', (await crun('taskkill /im nosuch.exe /f')).trim() === 'ERROR: The process "nosuch.exe" not found.' && (await crun('taskkill /pid 99996 /f')).trim() === 'ERROR: The process "99996" not found.');
+    WS.apps.launch('terminal'); await wait(120);
+    const wt = one('WindowsTerminal.exe');
+    o = await crun(`taskkill /pid ${wt.pid} /t /f`);
+    t('taskkill /t ends the children first', /SUCCESS: The process with PID \d+ \(child process of PID \d+\) has been terminated\./.test(o) && o.trim().split('\n').length === 3 && !one('WindowsTerminal.exe') && !WS.wm.find('terminal'), o);
+    o = await crun('sc queryex Dnscache');
+    t('sc queryex shows the hosting PID', o.includes(`PID                : ${P.pidOfService('Dnscache')}`), o);
+
+    /* ---------------- PowerShell ---------------- */
+    o = await run('Get-Process lsass');
+    t('Get-Process: the real table', /Handles\s+NPM\(K\)\s+PM\(K\)\s+WS\(K\)\s+CPU\(s\)\s+Id\s+SI ProcessName/.test(o) && /\s\d+\s+0 lsass/.test(o), o);
+    o = await run('Get-Process -Id 4 | Format-List');
+    t('Get-Process -Id 4 | Format-List: Id, Handles, CPU, SI, Name', /Id\s+: 4\nHandles\s+: \d+\nCPU\s+: [\d.]+\nSI\s+: 0\nName\s+: System/.test(o), o);
+    o = await run('Get-Process nosuch');
+    t('Get-Process: not-found error', o.includes('Cannot find a process with the name "nosuch". Verify the process name and call the cmdlet again.') && o.includes('NoProcessFoundForGivenName,Microsoft.PowerShell.Commands.GetProcessCommand'), o);
+    o = await run('Get-Process dwm -IncludeUserName');
+    t('Get-Process -IncludeUserName', /Handles\s+WS\(K\)\s+CPU\(s\)\s+Id UserName\s+ProcessName/.test(o) && o.includes('Window Manager\\DWM-1'), o);
+    o = await run('(Get-Process explorer).Path; (Get-Process svchost | Measure-Object).Count -gt 20; (Get-Process csrss)[0].Path -eq $null');
+    t('Path, counts, and a protected process has no Path', o.trim().split('\n').map(x => x.trim()).join('|') === 'C:\\Windows\\explorer.exe|True|True', o);
+    WS.apps.launch('notepad'); await wait(40);
+    o = await run('Get-Process notepad | Stop-Process');
+    t('Get-Process notepad | Stop-Process ends it (own process: no prompt)', !one('notepad.exe') && !o.includes('Confirm'), o);
+    o = await run('Stop-Process -Id 4 -Force');
+    t('Stop-Process on System: Access is denied', o.includes('Cannot stop process "System (4)" because of the following error: Access is denied') && o.includes('CouldNotStopProcess,Microsoft.PowerShell.Commands.StopProcessCommand'), o);
+    const sm2 = P.list().find(p => p.appId === 'servermanager');
+    o = await run(`$p = Get-Process -Id ${sm2.pid}; $p.PriorityClass = 'AboveNormal'; (Get-Process -Id ${sm2.pid}).PriorityClass`);
+    t('setting PriorityClass changes the process', o.trim() === 'AboveNormal' && P.get(sm2.pid).priority === 'AboveNormal', o);
+    o = await run(`(Get-Process -Id ${one('services.exe').pid}).PriorityClass = 'High'`);
+    t('setting it on a protected process: Exception setting', o.includes('Exception setting "PriorityClass": "Access is denied"'), o);
+    o = await run('Start-Process notepad -PassThru | Select-Object -ExpandProperty ProcessName');
+    t('Start-Process notepad -PassThru', o.trim() === 'notepad' && !!WS.wm.find('notepad'), o);
+    o = await run('Start-Process nosuchprogram');
+    t('Start-Process: file not found', o.includes('This command cannot be run due to the error: The system cannot find the file specified.'), o);
+    o = await run('Stop-Process -Name notepad -PassThru | Select-Object Name, HasExited');
+    t('Stop-Process -PassThru', /notepad\s+True/.test(o) && !one('notepad.exe'), o);
+    o = await run('Get-CimInstance Win32_Process | Where-Object Name -eq "lsass.exe" | Select-Object -ExpandProperty ProcessId');
+    t('Win32_Process', +o.trim() === one('lsass.exe').pid, o);
+    o = await run('Get-CimInstance Win32_StartupCommand');
+    t('Win32_StartupCommand lists the startup apps', /Command\s+User\s+Caption/.test(o) && o.includes('SecurityHealthSystray.exe') && o.includes('Windows Security notification icon'), o);
+    o = await run('(Get-CimInstance Win32_Service | Where-Object Name -eq Spooler).ProcessId');
+    t('Win32_Service ProcessId matches', +o.trim() === P.pidOfService('Spooler'), o);
+
+    /* ---------------- Task Manager ---------------- */
+    t('Task Manager is registered (Start, taskmgr) and blocked by Remove Task Manager wording', !!WS.apps.get('taskmgr') && !!WS.term.native('taskmgr'));
+    WS.apps.launch('notepad'); await wait(40);
+    let win = WS.apps.launch('taskmgr'); await wait(120);
+    let T = win.taskmgr;
+    t('one Task Manager: launching again focuses it', WS.apps.launch('taskmgr') === win && WS.wm.windows.filter(w => w.app === 'taskmgr').length === 1);
+    const tmProc = P.list().find(p => p.appId === 'taskmgr');
+    t('Taskmgr.exe runs at High priority', tmProc && tmProc.image === 'Taskmgr.exe' && tmProc.priority === 'High');
+    t('opens on Processes with the seven pages and Settings', T.page() === 'processes' && [...win.el.querySelectorAll('.tm-navlabel')].map(x => x.textContent).join() === 'Processes,Performance,App history,Startup apps,Users,Details,Services,Settings');
+    const groups = () => [...win.el.querySelectorAll('.tm-group')].map(x => x.textContent);
+    t('Processes: Apps, Background processes, Windows processes', /^Apps \(\d+\)$/.test(groups()[0]) && /^Background processes \(\d+\)$/.test(groups()[1]) && /^Windows processes \(\d+\)$/.test(groups()[2]), groups());
+    const names = () => [...win.el.querySelectorAll('.tm-rowname')].map(x => x.textContent);
+    t('apps: Notepad, Server Manager, Task Manager (with their windows)', ['Notepad (1)', 'Server Manager (1)', 'Task Manager (1)'].every(n => names().some(x => x === n || x === n.replace(' (1)', ''))), names().slice(0, 8));
+    t('Windows processes: Service Host: DNS Client, System interrupts, Windows Explorer', ['Service Host: DNS Client', 'System interrupts', 'Windows Explorer', 'Client Server Runtime Process', 'Local Security Authority Process'].every(n => names().some(x => x.startsWith(n))), names());
+    const heads = [...win.el.querySelectorAll('.tm-th')].map(x => x.textContent);
+    t('column headers carry the totals', /^\d+%CPU$/.test(heads[2]) && /^\d+%Memory$/.test(heads[3]) && heads[0].includes('Name'), heads);
+    if (shot('processes')) return;
+    const dnsNode = () => T.nodes().find(n => n.name === 'Service Host: DNS Client');
+    T.expand(dnsNode().id); await wait(20);
+    t('expanding a service host shows its service', names().includes('DNS Client'));
+    if (shot('expanded')) return;
+    T.search('lsass');
+    t('search filters by name or image', T.groups().flatMap(g => g.nodes).length === 1 && T.groups()[2].nodes[0].name === 'Local Security Authority Process');
+    T.search(String(one('dwm.exe').pid));
+    t('and by PID', T.groups().flatMap(g => g.nodes).map(n => n.name).join() === 'Desktop Window Manager');
+    T.search('');
+    const npNode = T.nodes().find(n => n.name === 'Notepad');
+    T.select(npNode.id);
+    t('selecting an app enables End task; Efficiency mode allowed', !T.commands().find(c => c.label === 'End task').disabled && !T.commands().find(c => c.label === 'Efficiency mode').disabled);
+    const appMenu = T.menu();
+    t('an app menu: Switch to, End task, ... Properties', ['Switch to', 'End task', 'Efficiency mode', 'Create memory dump file', 'Go to details', 'Open file location', 'Search online', 'Properties'].every(n => item(appMenu, n)));
+    await T.command('End task'); await wait(60);
+    t('End task closes Notepad at once', !one('notepad.exe') && !WS.wm.find('notepad'));
+    const exNode = T.nodes().find(n => n.name === 'Windows Explorer');
+    T.select(exNode.id);
+    t('Windows Explorer: Restart instead of End task', T.commands().some(c => c.label === 'Restart') && !T.commands().some(c => c.label === 'End task'));
+    const oldEx = one('explorer.exe').pid;
+    T.command('Restart'); await wait(100);
+    t('Restart: explorer.exe ends and the taskbar disappears', !one('explorer.exe') && document.getElementById('taskbar').style.display === 'none');
+    await until(() => !!one('explorer.exe'));
+    t('then it comes back with a new PID and the taskbar', one('explorer.exe').pid !== oldEx && document.getElementById('taskbar').style.display === '');
+    P.kill(one('explorer.exe').pid, {}); await wait(30);
+    t('after ending explorer.exe, "explorer" starts the shell instead of a window', WS.apps.launch('explorer') === null && !!one('explorer.exe') && document.querySelectorAll('#desktop-icons .desk-icon').length > 0 && !WS.wm.find('explorer'));
+    // a critical process
+    const wlNode = T.nodes().find(n => n.name === 'Windows Logon Application');
+    T.select(wlNode.id);
+    T.command('End task'); await wait(80);
+    t('ending winlogon asks to end the system process; Shut down waits for the checkbox', title() === 'Task Manager' && dlgText().includes("Do you want to end the system process 'Windows Logon Application'?") && dlgText().includes('Abandon unsaved data and shut down.') && button('Shut down').disabled);
+    if (shot('critical')) return;
+    await click('Cancel');
+    t('Cancel leaves it running', !!one('winlogon.exe'));
+    const svcNode = T.nodes().find(n => n.name === 'Service Host: Windows Time');
+    T.select(svcNode.id);
+    const sh = P.pidOfService('W32Time');
+    await T.command('End task'); await wait(40);
+    t('End task on a service host ends it without a prompt', !shade() && P.pidOfService('W32Time') !== sh);
+    WS.svc.start('W32Time');
+    const sysNode = T.nodes().find(n => n.name === 'System');
+    T.select(sysNode.id);
+    T.command('End task'); await wait(60);
+    t('System: Unable to terminate process / Access is denied', dlgText().includes('Unable to terminate process') && dlgText().includes('Access is denied.'));
+    await click('OK');
+    T.prefs().groupByType = false; T.refresh();
+    t('View > Group by type off: one sorted list', !win.el.querySelector('.tm-group') && T.groups().length === 1);
+    T.prefs().groupByType = true; T.setSort('cpu', -1);
+    t('sorting by CPU puts the busiest first within each group', T.groups().every(g => g.nodes.every((n, i) => i === 0 || g.nodes[i - 1].live.cpu >= n.live.cpu)));
+    T.setSort(null);
+
+    /* ---- Details ---- */
+    WS.apps.launch('notepad'); await wait(40);
+    T.go('details'); await wait(30);
+    const lvHeads = [...win.el.querySelectorAll('.lv-head .lv-hcell, .lv thead th, .lv-hdr div')].map(x => x.textContent.trim()).filter(Boolean);
+    t('Details: Name, PID, Status, User name, CPU, Memory, Architecture, Description', win.el.textContent.includes('Memory (active private working set)') && win.el.textContent.includes('Architecture') && win.el.textContent.includes('System Idle Process'), lvHeads);
+    npid = one('notepad.exe').pid;
+    T.select(npid);
+    win.focus();
+    if (shot('details')) return;
+    T.command('End task'); await wait(60);
+    t('Details End task asks "Do you want to end notepad.exe?"', dlgText().includes('Do you want to end notepad.exe?') && !!button('End process'));
+    await click('End process'); await wait(40);
+    t('End process ends it', !one('notepad.exe'));
+    const smp = P.list().find(p => p.appId === 'servermanager');
+    T.select(smp.pid);
+    const dm = T.menu();
+    t('the Details menu: priority, affinity, wait chain, dump, Go to service(s)...', ['End task', 'End process tree', 'Set priority', 'Set affinity', 'Analyze wait chain', 'UAC virtualization', 'Create memory dump file', 'Open file location', 'Properties', 'Go to service(s)'].every(n => item(dm, n)) && item(dm, 'Go to service(s)').disabled && item(dm, 'UAC virtualization').disabled);
+    t('Set priority shows the current class', item(item(dm, 'Set priority').items, 'Above normal').checked);
+    item(item(dm, 'Set priority').items, 'Below normal').action(); await wait(60);
+    t('changing priority asks first', dlgText().includes(`Do you want to change the priority of ServerManager.exe?`) && dlgText().includes('Changing the priority of certain processes could cause system instability.'));
+    if (shot('priority')) return;
+    await click('Change priority');
+    t('Change priority applies it', P.get(smp.pid).priority === 'BelowNormal');
+    item(T.menu(), 'Set affinity').action(); await wait(60);
+    t('Processor affinity: <All Processors> and CPU 0-3', title() === 'Processor affinity' && dlgText().includes('Which processors are allowed to run "ServerManager.exe"?') && ['<All Processors>', 'CPU 0', 'CPU 3'].every(x => dlgText().includes(x)));
+    if (shot('affinity')) return;
+    const aff = WS.taskmgr.lastDialog;
+    aff.all.checked = false; aff.boxes.forEach(b => { b.checked = false; });
+    await click('OK'); await wait(40);
+    t('no processor: "must have affinity with at least one processor"', dlgText().includes('The process must have affinity with at least one processor.'));
+    await click('OK'); await wait(60);
+    WS.taskmgr.lastDialog.boxes[1].checked = true;
+    WS.taskmgr.lastDialog.all.checked = false;
+    WS.taskmgr.lastDialog.boxes.forEach((b, i) => { b.checked = i === 1; });
+    await click('OK'); await wait(40);
+    t('CPU 1 only', P.get(smp.pid).affinity === 2);
+    item(T.menu(), 'Create memory dump file').action(); await wait(800);
+    t('Create memory dump file: "The file has been successfully created." with the short path', title() === 'Dumping process' && dlgText().includes('The file has been successfully created.') && dlgText().includes('C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\ServerManager (3).DMP'));
+    if (shot('dump')) return;
+    await click('OK');
+    const lsassP = one('lsass.exe');
+    T.select(lsassP.pid);
+    item(T.menu(), 'Go to service(s)').action(); await wait(40);
+    t('Go to service(s) opens Services with lsass.exe\'s services selected', T.page() === 'services' && ['SamSs', 'KeyIso'].includes(T.selected()));
+    T.go('details'); T.select(lsassP.pid);
+    item(T.menu(), 'Properties').action(); await wait(60);
+    t('Properties: the image file\'s General and Details tabs', title() === 'lsass.exe Properties' && dlgText().includes('Local Security Authority Process') && dlgText().includes('Application (.exe)'));
+    await click('Cancel');
+    T.select(one('explorer.exe').pid);
+    item(T.menu(), 'Analyze wait chain').action(); await wait(60);
+    t('Analyze wait chain', title() === 'Analyze wait chain' && dlgText().includes('explorer.exe is running normally.'));
+    await click('Close');
+    T.select(P.pidOfService('Dnscache'));
+    item(T.menu(), 'End process tree').action(); await wait(60);
+    t('End process tree asks first', dlgText().includes('Do you want to end the process tree of svchost.exe?'));
+    await click('Cancel');
+
+    /* ---- Services ---- */
+    T.go('services'); await wait(30);
+    T.select('Spooler');
+    t('Services: Name, PID, Description, Status, Group', win.el.textContent.includes('Print Spooler') && win.el.textContent.includes('LocalServiceNetworkRestricted') && T.commands().map(c => c.label).join() === 'Run new task,Start,Stop,Restart,Open services');
+    if (shot('services')) return;
+    await T.command('Stop'); await wait(40);
+    t('Stop stops the service', !WS.svc.isRunning('Spooler') && T.commands().find(c => c.label === 'Start').disabled === false);
+    await T.command('Start'); await wait(40);
+    t('Start starts it', WS.svc.isRunning('Spooler'));
+    WS.svc.setStartup('seclogon', 'Disabled');
+    T.select('seclogon');
+    T.command('Start'); await wait(60);
+    t('starting a disabled service: Unable to start service.', dlgText().includes('Unable to start service.') && dlgText().includes('disabled'), { text: dlgText(), cmds: T.commands(), sel: T.selected() });
+    await click('OK');
+
+    /* ---- Startup apps ---- */
+    T.go('startup'); await wait(30);
+    T.select('securityhealth');
+    t('Startup apps: Name, Publisher, Status, Startup impact', win.el.textContent.includes('Windows Security notification icon') && win.el.textContent.includes('Microsoft Corporation') && win.el.textContent.includes('Startup impact') && win.el.textContent.includes('Enabled'));
+    if (shot('startup')) return;
+    T.command('Disable'); await wait(100);
+    t('Disable', P.startupApps()[0].enabled === false && win.el.textContent.includes('Disabled') && T.commands().find(c => c.label === 'Enable').disabled === false);
+    T.command('Enable'); await wait(100);
+    t('Enable', P.startupApps()[0].enabled === true);
+
+    /* ---- Users ---- */
+    T.go('users'); await wait(30);
+    t('Users: Administrator with the session\'s processes', /Administrator \(\d+\)/.test(win.el.textContent) && ['Disconnect', 'Sign off', 'Send message...'].every(n => item(T.menu(), n)));
+    T.prefs().fullAccountName = true; T.refresh();
+    t('Show full account name', win.el.textContent.includes(`${WS.sys.name}\\Administrator`));
+    T.prefs().fullAccountName = false;
+    if (shot('users')) return;
+
+    /* ---- Performance ---- */
+    T.go('performance'); T.tick(); T.tick(); await wait(30);
+    const tiles = [...win.el.querySelectorAll('.tm-tilelabel')].map(x => x.textContent);
+    t('Performance: CPU, Memory, Disk 0 (C:), Ethernet', tiles.join() === 'CPU,Memory,Disk 0 (C:),Ethernet', tiles);
+    t('CPU page: the processor, % Utilization, and the VM facts', win.el.textContent.includes('Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz') && win.el.textContent.includes('% Utilization') && win.el.textContent.includes('Virtual processors:4') && win.el.textContent.includes('Up time'));
+    if (shot('performance')) return;
+    T.perf('mem');
+    t('Memory page: 4.0 GB, In use, Committed, Paged pool', win.el.querySelector('.tm-perfmodel').textContent === '4.0 GB' && ['In use (Compressed)', 'Available', 'Committed', 'Cached', 'Paged pool', 'Non-paged pool'].every(x => win.el.textContent.includes(x)));
+    if (shot('memory')) return;
+    T.perf('net');
+    t('Ethernet page: adapter and IPv4 address', win.el.textContent.includes('Adapter name:Ethernet') && win.el.textContent.includes('IPv4 address:' + WS.net.adapter().ip));
+    T.perf('cpu'); T.prefs().cpuGraph = 'logical'; T.refresh();
+    t('CPU graph: Logical processors shows four graphs', win.el.querySelectorAll('.tm-cores .tm-graph').length === 4);
+    if (shot('logical')) return;
+    T.prefs().cpuGraph = 'overall';
+
+    /* ---- Settings ---- */
+    T.go('settings'); await wait(20);
+    const speed = win.el.querySelector('[data-pref="speed"]');
+    speed.value = 'Low'; speed.dispatchEvent(new Event('change'));
+    t('Settings: start page, update speed, window management, other options', T.prefs().speed === 'Low' && ['Default start page', 'Real time update speed', 'Always on top', 'Minimize on use', 'Hide when minimized', 'Show full account name', 'Ask me before applying Efficiency mode'].every(x => win.el.textContent.includes(x)));
+    if (shot('settings')) return;
+    speed.value = 'Normal'; speed.dispatchEvent(new Event('change'));
+    const top = win.el.querySelector('[data-pref="alwaysOnTop"]');
+    top.checked = true; top.dispatchEvent(new Event('change'));
+    WS.apps.launch('notepad'); await wait(40);
+    t('Always on top keeps Task Manager above other windows', +win.el.style.zIndex > +WS.wm.find('notepad').el.style.zIndex);
+    top.checked = false; top.dispatchEvent(new Event('change'));
+    WS.wm.find('notepad').close();
+
+    /* ---- Run new task ---- */
+    T.go('processes');
+    T.runNewTask(); await wait(80);
+    t('Create new task: the prompt and the admin note', title() === 'Create new task' && dlgText().includes('Type the name of a program, folder, document, or Internet resource, and Windows will open it for you.') && dlgText().includes('This task will be created with administrative privileges.'));
+    if (shot('run')) return;
+    WS.taskmgr.lastDialog.input.value = 'nosuchapp';
+    await click('OK'); await wait(60);
+    t('an unknown name: Windows cannot find', title() === 'nosuchapp' && dlgText().includes("Windows cannot find 'nosuchapp'. Make sure you typed the name correctly, and then try again."));
+    await click('OK'); await wait(80);
+    t('then the dialog comes back with the text', title() === 'Create new task' && WS.taskmgr.lastDialog.input.value === 'nosuchapp');
+    WS.taskmgr.lastDialog.input.value = 'services.msc';
+    await click('OK'); await wait(80);
+    t('services.msc opens Services in mmc.exe', !!WS.wm.find('services') && P.list().some(p => p.image === 'mmc.exe' && /services\.msc/.test(p.cmdLine)));
+    WS.wm.find('services').close();
+    t('the launch resolver knows folders, text files and .exe names', WS.term.resolveLaunch('C:\\Windows').app === 'explorer' && WS.term.resolveLaunch('C:\\Windows\\System32\\drivers\\etc\\hosts') === null && WS.term.resolveLaunch('notepad C:\\x.txt').args.path === 'C:\\x.txt' && WS.term.resolveLaunch('cmd.exe').app === 'cmd' && WS.term.resolveLaunch('mmc dsa.msc').app === 'dsa');
+    // taskbar and keyboard
+    win.minimize();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', ctrlKey: true, shiftKey: true, bubbles: true })); await wait(40);
+    t('Ctrl+Shift+Esc brings Task Manager back', !win.minimized && WS.wm.active === win);
+    const tb = document.getElementById('taskbar');
+    tb.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 700, clientY: 880 })); await wait(40);
+    const ctx = [...document.querySelectorAll('.menu.ctx')].pop();
+    t('right-clicking the taskbar offers Task Manager and Taskbar settings', ctx && ctx.textContent.includes('Task Manager') && ctx.textContent.includes('Taskbar settings'));
+    WS.ui.closeMenu();
+    win.close();
+
+    /* ---------------- the bug check ---------------- */
+    WS.shell.bugcheckDelay = new URLSearchParams(location.search).get('shot') === 'bsod' ? 4000 : 60;
+    const wl = one('winlogon.exe');
+    o = await run(`Stop-Process -Id ${wl.pid} -Force`);
+    await wait(150);
+    t('ending winlogon.exe stops the system: the stop code screen', !!document.querySelector('.overlay.bsod') && document.querySelector('.overlay.bsod').textContent.includes('Stop code: CRITICAL_PROCESS_DIED') && document.querySelector('.overlay.bsod').textContent.includes('Your device ran into a problem and needs to restart.'));
+    if (shot('bsod')) return;
+    await until(() => !document.querySelector('.overlay.bsod') && !!document.querySelector('.overlay.lock'), 9000);
+    const sys = WS.state.events.logs.System;
+    t('after the restart: Kernel-Power 41, EventLog 6008 and BugCheck 1001 with the dump', sys.some(e => e.id === 41 && e.level === 'Critical') && sys.some(e => e.id === 6008 && /was unexpected\.$/.test(e.message)) && sys.some(e => e.id === 1001 && /The bugcheck was: 0x000000ef/.test(e.message)) && !!WS.fs.stat('C:\\Windows\\MEMORY.DMP'));
+    t('and there is no clean-shutdown 1074 before it', !sys.slice(-12).some(e => e.id === 1074) && !WS.state.system.crash);
+    WS.shell.startSession('Administrator'); await wait(200);
+    t('signing in again starts a fresh session', !!one('explorer.exe') && !!one('winlogon.exe'));
+  } catch (e) {
+    fail++; console.log('FAIL exception ' + e.message + ' ' + (e.stack || '').split('\n').slice(0, 5).join(' | '));
+  }
+  console.log(`RESULT ${pass} passed, ${fail} failed`);
+})();

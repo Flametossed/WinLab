@@ -1,0 +1,147 @@
+/* Hyper-V Manager (virtmgmt.msc) and Virtual Machine Connection (vmconnect). */
+.hv-intro { padding: 14px 18px; overflow: auto; height: 100%; box-sizing: border-box; }
+.hv-intro h2 { margin: 0 0 6px; font-size: 18px; font-weight: 400; color: #1f3a66; }
+.hv-introbox { margin-top: 12px; padding: 10px 12px; border: 1px solid #d3dde9; background: #f7f9fc; max-width: 720px; }
+.hv-warn { color: #9a6700; }
+.hv-lower { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.hv-cp { flex: 0 0 auto; max-height: 45%; overflow: auto; border-bottom: 1px solid #d9d9d9; }
+.hv-sechead { padding: 3px 8px; font-weight: 600; background: #eef2f7; border-bottom: 1px solid #d9d9d9; }
+.hv-empty { padding: 6px 10px; color: #555; }
+.hv-cptree { border: 0; min-height: 40px; }
+.hv-details { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.hv-dhead { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-weight: 600; background: #eef2f7; border-bottom: 1px solid #d9d9d9; }
+.hv-dhead svg { width: 16px; height: 16px; display: block; }
+.hv-dbody { flex: 1; overflow: auto; padding: 6px 10px; }
+.hv-dcols { display: flex; gap: 40px; }
+.hv-dtabs { display: flex; border-top: 1px solid #d9d9d9; background: #f5f7fa; }
+.hv-dtab { padding: 3px 12px; border-right: 1px solid #d9d9d9; cursor: default; }
+.hv-dtab.sel { background: #fff; font-weight: 600; }
+.hv-kv { border-collapse: collapse; }
+.hv-kv td { padding: 2px 14px 2px 0; vertical-align: top; }
+.hv-kv td:first-child { color: #444; white-space: nowrap; }
+.hv-nets { border-collapse: collapse; width: 100%; }
+.hv-nets th { text-align: left; font-weight: 400; color: #555; border-bottom: 1px solid #ddd; padding: 2px 8px 2px 0; }
+.hv-nets td { padding: 2px 8px 2px 0; }
+/* wizards */
+.hv-wz p { margin: 0 0 10px; }
+.hv-wz ul { margin: 0 0 10px 18px; padding: 0; }
+.hv-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.hv-row > label { min-width: 110px; }
+.hv-inline { display: flex; align-items: center; gap: 6px; }
+.hv-inline.hv-top { align-items: flex-start; }
+.hv-desc { margin: 0 0 8px 22px; color: #444; }
+.hv-note { margin: 8px 0; padding: 6px 8px; background: #f6f6f6; border: 1px solid #e3e3e3; color: #333; }
+.hv-indent { margin-left: 22px; }
+.hv-sumhead { font-weight: 600; margin-bottom: 4px; }
+.hv-sum { border-collapse: collapse; margin-bottom: 12px; border: 1px solid #d9d9d9; width: 100%; }
+.hv-sum td { padding: 3px 8px; vertical-align: top; }
+.hv-sum td:first-child { white-space: nowrap; width: 130px; color: #333; }
+/* split dialogs: Virtual Switch Manager, Settings, Hyper-V Settings */
+.hv-big { display: flex; flex-direction: column; }
+.hv-big .dlg-body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.hv-big .dlg-buttons { flex: none; }
+.hv-split { display: flex; gap: 0; flex: 1; min-height: 0; height: 100%; border: 1px solid #c9c9c9; background: #fff; }
+.hv-left { width: 250px; flex: none; overflow: auto; border-right: 1px solid #c9c9c9; background: #fff; }
+.hv-right { flex: 1; overflow: auto; padding: 10px 14px; position: relative; }
+.hv-litem { display: flex; gap: 6px; padding: 3px 6px; cursor: default; }
+.hv-litem.indent { padding-left: 22px; }
+.hv-litem.head { font-weight: 600; background: #eef2f7; color: #1f3a66; margin-top: 2px; }
+.hv-litem.sel { background: #cce8ff; }
+.hv-litem:not(.head):hover { background: #e5f3ff; }
+.hv-litem.sel:hover { background: #cce8ff; }
+.hv-lic svg { width: 16px; height: 16px; display: block; }
+.hv-lsub { color: #666; font-size: 11px; }
+.hv-rhead { font-weight: 600; font-size: 13px; margin-bottom: 8px; color: #1f3a66; }
+.hv-right .grp { margin: 8px 0; }
+.hv-right-b { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.hv-types { border: 1px solid #c9c9c9; width: 260px; margin: 6px 0; }
+.hv-type { padding: 3px 8px; cursor: default; }
+.hv-type.sel { background: #cce8ff; }
+.hv-boot { border: 1px solid #c9c9c9; width: 360px; min-height: 90px; }
+.hv-bootrow { display: flex; align-items: center; gap: 6px; padding: 3px 6px; cursor: default; }
+.hv-bootrow.sel { background: #cce8ff; }
+.hv-dim { color: #777; margin-left: auto; }
+.hv-mv { display: flex; flex-direction: column; gap: 6px; }
+/* Virtual Machine Connection */
+.vmc { display: flex; flex-direction: column; height: 100%; min-height: 0; background: #f0f0f0; font: var(--w32-font); }
+.vmc-toolbar { display: flex; align-items: center; gap: 2px; padding: 2px 6px; border-bottom: 1px solid #d0d0d0; flex: none; }
+.vmc-tb { width: 26px; height: 24px; padding: 3px; border: 1px solid transparent; background: transparent; color: #333; }
+.vmc-tb svg { width: 16px; height: 16px; display: block; }
+.vmc-tb:hover:not(:disabled) { background: #e5f1fb; border-color: #a8d1f5; }
+.vmc-tb:disabled { opacity: .35; }
+.vmc-sep { width: 1px; height: 18px; background: #c8c8c8; margin: 0 4px; }
+.vmc-screenwrap { flex: 1; min-height: 0; background: #1b1b1b; display: flex; }
+.vmc-screen { flex: 1; position: relative; background: #000; color: #ddd; overflow: hidden; outline: none; font: 14px "Segoe UI", system-ui, sans-serif; }
+.vmc-screen.vmc-offline { background: #fff; color: #1b1b1b; }
+.vmc-status { flex: none; padding: 2px 8px; border-top: 1px solid #d0d0d0; color: #333; }
+.vmc-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+.vmc-center p { margin: 2px 0; }
+.vmc-startbtn { margin-top: 14px; }
+.vmc-paused { position: absolute; inset: 0; background: rgba(0,0,0,.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.vmc-post { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.vmc-hvlogo { font-size: 26px; color: #9fb7d6; letter-spacing: 1px; }
+.vmc-post pre, .vmc-text { margin: 0; padding: 14px 16px; font: 15px Consolas, "Courier New", monospace; color: #c8c8c8; white-space: pre-wrap; }
+.vmc-summary { position: absolute; inset: 0; background: #000; display: flex; align-items: flex-start; justify-content: center; padding-top: 40px; }
+.vmc-sumbox { width: 82%; border: 1px solid #8a8a8a; padding: 10px 16px; font: 14px Consolas, "Courier New", monospace; color: #e8e8e8; }
+.vmc-sumtitle { text-align: center; margin-bottom: 12px; }
+.vmc-sumbox table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+.vmc-sumbox td { padding: 3px 6px; vertical-align: top; }
+.vmc-setup { position: absolute; inset: 0; background: linear-gradient(135deg, #1e2a78, #4b2a8a 60%, #1d5fa8); display: flex; align-items: center; justify-content: center; }
+.vmc-setupwin { width: 78%; max-width: 640px; background: #fff; color: #1b1b1b; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.4); display: flex; flex-direction: column; }
+.vmc-setuptitle { display: flex; align-items: center; gap: 8px; padding: 10px 16px; font-size: 12px; color: #444; border-bottom: 1px solid #eee; }
+.vmc-setuplogo, .vmc-winlogo, .vmc-deskstart { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 1px; width: 14px; height: 14px; }
+.vmc-setuplogo i, .vmc-deskstart i { background: #0078d4; }
+.vmc-setupbody { padding: 16px 22px; min-height: 220px; }
+.vmc-setupbody h2 { margin: 0 0 14px; font-size: 20px; font-weight: 600; }
+.vmc-setupbody label { display: block; margin: 10px 0 4px; }
+.vmc-sel { width: 100%; padding: 4px; border: 1px solid #bbb; border-radius: 4px; }
+.vmc-setupbtns { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; background: #fafafa; border-radius: 0 0 8px 8px; }
+.vmc-sbtn { min-width: 80px; height: 30px; border: 1px solid #c8c8c8; border-radius: 4px; background: #fff; }
+.vmc-sbtn.primary { background: #0067c0; color: #fff; border-color: #0067c0; }
+.vmc-sbtn:disabled { opacity: .45; }
+.vmc-radio, .vmc-chk { display: flex !important; gap: 8px; align-items: flex-start; margin: 8px 0 !important; }
+.vmc-imgs { border: 1px solid #ddd; border-radius: 4px; }
+.vmc-img { padding: 6px 10px; cursor: default; border-bottom: 1px solid #f0f0f0; }
+.vmc-img.sel { background: #cce4f7; }
+.vmc-eula { height: 150px; overflow: auto; border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+.vmc-disks { width: 100%; border-collapse: collapse; }
+.vmc-disks th { text-align: left; font-weight: 400; color: #555; border-bottom: 1px solid #ddd; padding: 3px 6px; }
+.vmc-disks td { padding: 4px 6px; }
+.vmc-disks tr.sel td { background: #cce4f7; }
+.vmc-links { display: flex; gap: 16px; margin-top: 10px; color: #0067c0; }
+.vmc-prog { height: 6px; background: #e5e5e5; border-radius: 3px; overflow: hidden; margin: 6px 0; }
+.vmc-progbar { height: 100%; background: #0067c0; }
+.vmc-dim { color: #666; }
+.vmc-warn { color: #9a6700; }
+.vmc-booting, .vmc-lock { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px; color: #fff; }
+.vmc-booting { background: #000; }
+.vmc-winlogo { width: 64px; height: 64px; gap: 3px; }
+.vmc-winlogo i { background: #4ca3ff; }
+.vmc-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.2); border-top-color: #fff; animation: vmc-spin 1s linear infinite; }
+@keyframes vmc-spin { to { transform: rotate(360deg); } }
+.vmc-oobe { position: absolute; inset: 0; background: #0b5394; color: #fff; padding: 60px 70px; }
+.vmc-oobe h1 { font-weight: 300; font-size: 30px; margin: 0 0 12px; }
+.vmc-row { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
+.vmc-row label { width: 140px; }
+.vmc-in { width: 260px; height: 28px; padding: 0 8px; border: 1px solid #999; }
+.vmc-err { color: #ffd2cc; min-height: 18px; margin: 4px 0 0 152px; }
+.vmc-oobebtn { position: absolute; right: 40px; bottom: 30px; }
+.vmc-osname { position: absolute; left: 20px; bottom: 14px; font-size: 12px; opacity: .8; white-space: pre-line; }
+.vmc-lock { background: linear-gradient(160deg, #0f3b6e, #2a6db5); gap: 6px; justify-content: flex-end; align-items: flex-start; padding: 0 0 70px 40px; }
+.vmc-time { font-size: 72px; font-weight: 300; }
+.vmc-date { font-size: 22px; }
+.vmc-hint { margin-top: 20px; font-size: 13px; opacity: .85; }
+.vmc-lock.signin { align-items: center; justify-content: center; padding: 0; gap: 12px; }
+.vmc-lock.signin .vmc-err { margin: 0; color: #fff; }
+.vmc-avatar { width: 96px; height: 96px; border-radius: 50%; background: #c8d4e3; }
+.vmc-user { font-size: 22px; }
+.vmc-console { position: absolute; inset: 0; margin: 0; padding: 10px 14px; background: #012456; color: #eee; font: 13px Consolas, "Courier New", monospace; white-space: pre; overflow: hidden; }
+.vmc-desk { position: absolute; inset: 0; background: linear-gradient(160deg, #0b3a6c, #1a5fa3); }
+.vmc-deskwin { position: absolute; left: 8%; top: 8%; width: 70%; height: 62%; background: #fff; color: #1b1b1b; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+.vmc-deskwt { padding: 6px 10px; border-bottom: 1px solid #ddd; font-size: 12px; }
+.vmc-deskbody { padding: 10px 16px; font-size: 12px; }
+.vmc-deskbody h3 { margin: 0 0 8px; font-weight: 400; font-size: 18px; color: #1f3a66; }
+.vmc-desktaskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 34px; background: rgba(240,240,240,.92); display: flex; align-items: center; justify-content: space-between; padding: 0 12px; color: #1b1b1b; }
+.vmc-deskstart { width: 16px; height: 16px; }
+.vmc-deskclock { font-size: 12px; }
+.vmc-deskmark { position: absolute; right: 12px; bottom: 44px; text-align: right; font-size: 11px; color: #fff; white-space: pre-line; opacity: .85; }

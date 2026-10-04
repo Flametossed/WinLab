@@ -1,0 +1,81 @@
+/* Windows Defender Firewall with Advanced Security (wf.msc) and the firewall control panel (firewall.cpl). */
+.wf-page { padding: 12px 20px 20px; overflow: auto; height: 100%; box-sizing: border-box; line-height: 1.45; user-select: text; -webkit-user-select: text; }
+.wf-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+.wf-title svg { width: 24px; height: 24px; display: block; }
+.wf-sec { margin: 12px 0; border: 1px solid #dcdcdc; }
+.wf-sech { background: linear-gradient(#f7f9fc, #e8eef6); border-bottom: 1px solid #dcdcdc; padding: 3px 8px; font-weight: 600; }
+.wf-secb { padding: 8px 12px; }
+.wf-prof { margin: 4px 0 10px; }
+.wf-ptitle { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.wf-pic svg, .wf-sic svg { width: 16px; height: 16px; display: block; }
+.wf-plines { padding-left: 24px; }
+.wf-sline { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.wf-links { display: flex; gap: 18px; margin-top: 6px; }
+.wf-gs { margin: 6px 0 12px; }
+.wf-gs p { margin: 2px 0 4px; color: #333; }
+.wf-kv { display: flex; gap: 10px; margin: 2px 0; }
+.wf-kv span:first-child { width: 330px; flex: none; }
+.wf-wz .wf-p, .wf-p { margin: 0 0 8px; }
+.wf-opt { margin: 2px 0 10px; }
+.wf-optdesc { color: #555; padding-left: 22px; }
+.wf-indent { padding-left: 22px; }
+.wf-indent2 { padding-left: 44px; }
+.wf-note { color: #555; white-space: pre-line; }
+.wf-line { display: flex; align-items: center; gap: 8px; }
+.wf-line > .chk { flex: none; }
+.wf-portbox { padding-left: 128px; margin: -4px 0 6px; }
+.wf-sechead { font-weight: 600; margin: 4px 0; }
+.wf-scope { margin-bottom: 6px; }
+.wf-scoperow { display: flex; gap: 8px; padding-left: 22px; }
+select.inp.wf-addr { flex: 1; height: 70px; background: #fff; }
+select.inp.wf-addr:disabled { background: var(--w32-bg); }
+.wf-btncol { display: flex; flex-direction: column; gap: 6px; }
+.wf-predef { border: 1px solid #828790; background: #fff; height: 210px; overflow: auto; }
+.wf-prow { display: grid; grid-template-columns: 24px 70px 1fr 70px 1fr; gap: 4px; padding: 2px 4px; align-items: center; white-space: nowrap; }
+.wf-prow > span { overflow: hidden; text-overflow: ellipsis; }
+.wf-prow.head { border-bottom: 1px solid #e5e5e5; position: sticky; top: 0; background: #fff; }
+.wf-banner { display: flex; gap: 8px; align-items: center; padding: 6px 8px; margin-bottom: 8px; background: #fff4ce; border: 1px solid #e8d48a; }
+.wf-banner svg { width: 16px; height: 16px; display: block; }
+.wf-tool { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wf-tool .btn { flex: none; }
+.wf-form .grp { margin: 6px 0 10px; }
+
+/* Control Panel look (firewall.cpl) */
+.cp { display: flex; flex-direction: column; height: 100%; background: #fff; font: 12px/1.4 "Segoe UI", var(--font); color: #1b1b1b; }
+.cp-bar { flex: none; padding: 6px 12px; border-bottom: 1px solid #e5e5e5; background: #fff; }
+.cp-crumbs { display: flex; align-items: center; gap: 6px; border: 1px solid #d9d9d9; padding: 3px 8px; color: #1b1b1b; }
+.cp-sep { color: #8a8a8a; }
+.cp-body { flex: 1; min-height: 0; display: flex; }
+.cp-nav { width: 230px; flex: none; padding: 14px 14px; background: #f3f6fb; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.cp-nav:empty { display: none; }
+.cp-link { color: #0b5cad; text-decoration: none; display: flex; align-items: flex-start; gap: 4px; }
+.cp-link:hover { text-decoration: underline; }
+.cp-uac svg { width: 14px; height: 14px; display: block; flex: none; margin-top: 1px; }
+.cp-see { margin-top: 18px; color: #555; }
+.cp-main { flex: 1; min-width: 0; overflow: auto; padding: 14px 26px 20px; }
+.cp-h1 { font-size: 17px; font-weight: 400; color: #1e3287; margin: 0 0 8px; }
+.cp-h2 { font-size: 13px; font-weight: 400; color: #1e3287; margin: 14px 0 6px; }
+.cp-warn { display: flex; align-items: center; gap: 10px; border: 1px solid #e7a6ad; background: #fde7e9; padding: 8px 10px; margin: 8px 0 12px; }
+.cp-warn > div { flex: 1; }
+.cp-wic svg, .cp-sic svg { width: 18px; height: 18px; display: block; }
+.cp-sec { border: 1px solid #d9d9d9; margin: 8px 0; }
+.cp-sech { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: linear-gradient(#fbfcfe, #eef2f8); }
+.cp-sec.open .cp-sech { border-bottom: 1px solid #d9d9d9; }
+.cp-sname { flex: 1; font-weight: 600; }
+.cp-conn { color: #555; }
+.cp-table { padding: 6px 10px; }
+.cp-tr { display: grid; grid-template-columns: 260px 1fr; gap: 10px; padding: 3px 0; }
+.cp-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0; }
+.cp-row.right { justify-content: flex-end; }
+.cp-foot { border-top: 1px solid #e5e5e5; padding-top: 10px; margin-top: 14px; }
+.cp-change { display: inline-flex; align-items: center; gap: 4px; }
+.cp-lbl { margin: 10px 0 4px; }
+.cp-apps { border: 1px solid #828790; height: 280px; overflow: auto; }
+.cp-arow { display: grid; grid-template-columns: 1fr 70px 70px 70px; align-items: center; padding: 1px 6px; }
+.cp-arow.head { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #e5e5e5; }
+.cp-arow:not(.head):hover { background: var(--w32-hot); }
+.cp-aname { display: flex; align-items: center; gap: 6px; }
+.cp-acb, .cp-arow.head span:not(:first-child) { text-align: center; }
+.cp-cust { margin-bottom: 6px; }
+.cp-copt { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0 6px 16px; }
+.cp-sub { padding-left: 22px; }

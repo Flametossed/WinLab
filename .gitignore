@@ -1,0 +1,4 @@
+# test runner output (logs, DOM dumps, screenshots)
+.test-output/
+.DS_Store
+Thumbs.db

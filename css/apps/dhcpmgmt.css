@@ -1,0 +1,44 @@
+/* DHCP console (dhcpmgmt.msc) styles. */
+.dhcp-info { padding: 16px 22px; max-width: 660px; line-height: 1.45; user-select: text; -webkit-user-select: text; }
+.dhcp-info h3 { font-size: 15px; font-weight: 600; margin: 0 0 14px; color: #1b1b1b; }
+.dhcp-info p { margin: 0 0 10px; }
+.dhcp-form { padding: 2px; }
+.dhcp-form > .fnote:first-child { margin-top: 0; }
+.dhcp-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-weight: 600; }
+.dhcp-header svg { width: 32px; height: 32px; }
+.dhcp-indent { padding-left: 20px; }
+.dhcp-right { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.dhcp-box { border: 1px solid #828790; background: #fff; height: 120px; padding: 4px 6px; }
+.dhcp-line { display: flex; gap: 6px; align-items: center; }
+.dhcp-line.top { align-items: flex-start; margin-top: 6px; }
+.dhcp-line > .inp:not(select) { flex: 1; min-width: 0; }
+select.inp.dhcp-ips { height: auto; flex: 1; min-width: 0; width: 100%; padding: 0; background: #fff; }
+select.inp.dhcp-ips:disabled { background: var(--w32-bg); }
+.dhcp-btncol { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.dhcp-iped { margin-top: 6px; }
+.dhcp-iped.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 16px; }
+.dhcp-srvcol .inp { width: 100%; }
+.dhcp-srvcol .flabel, .dhcp-ipcol .flabel { display: block; margin-bottom: 3px; }
+.dhcp-resolve { display: flex; justify-content: flex-end; margin-top: 6px; }
+.dhcp-lease { display: flex; gap: 16px; margin: 4px 0 6px 20px; }
+.dhcp-lease label { display: flex; flex-direction: column; gap: 2px; }
+.dhcp-exrow { display: flex; gap: 12px; align-items: flex-end; margin: 8px 0 10px; }
+.dhcp-exrow .flabel { display: block; margin-bottom: 3px; }
+.dhcp-wz > .fnote, .dhcp-wtext p { color: #1b1b1b; }
+.dhcp-wz > .fnote { margin: 0 0 8px; }
+.dhcp-wz .grp { margin: 6px 0 10px; }
+.dhcp-wtext p { margin: 0 0 14px; }
+.dhcp-optlist { height: 168px; overflow: auto; border: 1px solid #828790; background: #fff; outline: 0; margin-bottom: 6px; }
+.dhcp-opthead { display: flex; position: sticky; top: 0; background: #fff; border-bottom: 1px solid #e5e5e5; z-index: 1; }
+.dhcp-opthead span { padding: 2px 6px; border-right: 1px solid #e5e5e5; }
+.dhcp-opthead span:first-child, .dhcp-optname { width: 190px; flex: none; }
+.dhcp-optrow { display: flex; align-items: center; height: 20px; white-space: nowrap; border: 1px solid transparent; }
+.dhcp-optrow:hover { background: var(--w32-hot); }
+.dhcp-optrow.sel { background: var(--w32-sel-inactive); }
+.dhcp-optlist:focus .dhcp-optrow.sel, .dhcp-optlist:focus-within .dhcp-optrow.sel { background: var(--w32-sel); border-color: var(--w32-sel-border); }
+.dhcp-optname { display: flex; align-items: center; gap: 5px; padding: 0 4px; overflow: hidden; }
+.dhcp-optname input { margin: 0; }
+.dhcp-optdesc { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; color: #333; }
+.dhcp-entry { min-height: 150px; }
+.frow .fctl > .inp.dhcp-ipf:not(.num):not(.sel), .inp.dhcp-ipf { flex: none; width: 150px; }
+.dhcp-stats { height: 360px; border: 1px solid #828790; }

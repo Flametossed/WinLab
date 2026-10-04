@@ -1,0 +1,110 @@
+/* Group Policy Management (gpmc.msc) and the Group Policy Management Editor. */
+.gpmc-pane { display: flex; flex-direction: column; height: 100%; min-height: 0; background: #fff; }
+.gpmc-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px 6px; font-size: 16px; font-weight: 600; color: #1b1b1b; }
+.gpmc-hicon svg { width: 22px; height: 22px; display: block; }
+.gpmc-tabs { display: flex; padding: 0 8px; border-bottom: 1px solid #d9d9d9; flex: none; }
+.gpmc-tab { padding: 4px 10px; border: 1px solid transparent; border-bottom: 0; margin-bottom: -1px; cursor: default; color: #1b1b1b; }
+.gpmc-tab:hover { background: #e5f1fb; }
+.gpmc-tab.sel { background: #fff; border-color: #d9d9d9; border-bottom: 1px solid #fff; }
+.gpmc-tabbody { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; font: var(--w32-font); user-select: text; -webkit-user-select: text; }
+.gpmc-tabbody > .gpmc-list:only-child { height: 100%; }
+.gpmc-list { border: 1px solid #d9d9d9; min-height: 80px; height: 260px; }
+.gpmc-split { display: flex; gap: 6px; height: calc(100% - 4px); min-height: 160px; }
+.gpmc-split .gpmc-list { flex: 1; height: auto; }
+.gpmc-arrows { display: flex; flex-direction: column; gap: 4px; padding-top: 24px; }
+.gpmc-arrow { width: 24px; height: 24px; padding: 3px; border: 1px solid #c8c8c8; background: #f6f6f6; }
+.gpmc-arrow:hover { background: #e5f1fb; border-color: #7eb4ea; }
+.gpmc-arrow svg { width: 16px; height: 16px; display: block; }
+.gpmc-sec { margin: 0 0 12px; }
+.gpmc-sh { font-weight: 600; font-size: 13px; border-bottom: 1px solid #c5d4ea; margin-bottom: 4px; padding-bottom: 2px; color: #1f3a66; }
+.gpmc-btns { display: flex; gap: 6px; margin: 6px 0; }
+.gpmc-inline { display: flex; align-items: center; gap: 6px; }
+.gpmc-inline .chk { flex: none; }
+.gpmc-indent { padding-left: 22px; }
+.gpmc-kv { border-collapse: collapse; margin-bottom: 8px; }
+.gpmc-kv td { padding: 3px 18px 3px 0; vertical-align: top; }
+.gpmc-kv td:first-child { color: #333; white-space: nowrap; }
+.gpmc-details .frow { align-items: flex-start; }
+.gpmc-banner { background: #fff8d8; border: 1px solid #e6d27a; padding: 4px 8px; margin-bottom: 6px; }
+.gpmc-status p { margin: 4px 0 8px; }
+.gpmc-error { display: flex; gap: 12px; padding: 10px; }
+.gpmc-error > span svg { width: 32px; height: 32px; display: block; }
+.gpmc-error p { margin: 6px 0 10px; color: #333; }
+.gpmc-report { margin: -10px -12px; }
+.gpmc-reportbox { height: 460px; overflow: auto; border: 1px solid #d9d9d9; }
+.gpmc-reportbox .gpmc-report { margin: 0; }
+.gpmc-notice { display: flex; gap: 12px; }
+.gpmc-nicon svg { width: 32px; height: 32px; display: block; }
+.gpmc-notice p { margin: 0 0 12px; }
+.gpmc-dlg .lv.gpmc-pick, .lv.gpmc-pick { height: 170px; border: 1px solid #d9d9d9; }
+.lv.gpmc-backups { height: 200px; border: 1px solid #d9d9d9; }
+.lv.gpmc-queries { height: 110px; flex: 1; border: 1px solid #d9d9d9; }
+.gpmc-qrow { display: flex; gap: 8px; }
+.gpmc-qbtns { display: flex; flex-direction: column; gap: 6px; }
+.tv.gpmc-ctree { height: 260px; border: 1px solid #d9d9d9; }
+.gpmc-sum { border-collapse: collapse; margin: 6px 0 10px; background: #fff; border: 1px solid #d9d9d9; width: 100%; }
+.gpmc-sum td { padding: 3px 8px; border-bottom: 1px solid #eee; }
+.gpmc-sum td:first-child { width: 45%; color: #333; }
+
+/* Group Policy Management Editor */
+.gpme-ext h3 { margin-bottom: 8px; }
+.gpme-ext .gpme-req { margin-top: 10px; }
+.gpme-ext .gpme-desc { white-space: pre-line; }
+.gpme-info { padding: 20px; color: #444; white-space: pre-line; }
+.gpme-pol { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.gpme-polhead { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+.gpme-polhead .gpme-pname { flex: 1; font-weight: 600; }
+.gpme-top { display: flex; gap: 14px; }
+.gpme-radios { width: 150px; flex: none; }
+.gpme-right { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.gpme-right textarea { width: 100%; box-sizing: border-box; }
+.gpme-supported { background: #f3f3f3; border: 1px solid #d9d9d9; padding: 4px 6px; min-height: 30px; }
+.gpme-bottom { display: flex; gap: 10px; min-height: 230px; }
+.gpme-opts, .gpme-help { flex: 1; border: 1px solid #d9d9d9; background: #fff; padding: 6px 8px; overflow: auto; height: 230px; box-sizing: border-box; }
+.gpme-opts.disabled { color: #8a8a8a; pointer-events: none; }
+.gpme-help { white-space: pre-line; }
+.gpme-cap { font-weight: 600; margin: 2px 0 2px; }
+.gpme-opt { margin: 0 0 8px; }
+.gpme-opt > label { display: block; margin-bottom: 2px; }
+.gpme-sec { display: flex; flex-direction: column; gap: 8px; }
+.gpme-sechead { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.gpme-sechead svg { width: 24px; height: 24px; display: block; }
+.gpme-secbody { padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+.gpme-secbody.disabled { color: #8a8a8a; pointer-events: none; }
+.gpme-num { display: flex; align-items: center; gap: 6px; }
+.gpme-accounts { height: 150px; border: 1px solid #d9d9d9; background: #fff; overflow: auto; }
+.gpme-accounts div { padding: 1px 4px; }
+.gpme-accounts div.sel { background: var(--w32-sel); }
+.gpme-explain { white-space: pre-line; height: 300px; overflow: auto; }
+.gpme-sugg { border-collapse: collapse; width: 100%; margin: 8px 0; }
+.gpme-sugg th, .gpme-sugg td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #e3e3e3; }
+.gpme-list textarea { width: 100%; box-sizing: border-box; }
+
+/* Group Policy Preferences: Drive Maps (js/apps/gpme-prefs.js) */
+.lv-row.gpp-off { color: #8a8a8a; }
+.gpp-gen { display: flex; flex-direction: column; gap: 6px; }
+.gpp-arow { display: flex; align-items: center; gap: 8px; }
+.gpp-dicon svg { width: 32px; height: 32px; display: block; }
+.gpp-loc { display: flex; gap: 4px; }
+.gpp-rl { display: flex; align-items: center; gap: 8px; }
+.gpp-rl > label:not(.chk) { margin-left: 18px; }
+.gpp-letters { display: flex; flex-direction: column; gap: 4px; }
+.gpp-letters .chk { min-width: 210px; }
+.gpp-pw .frow { margin: 2px 0; }
+.gpp-hs { display: flex; gap: 8px; }
+.gpp-hs .grp { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.gpp-common { display: flex; flex-direction: column; gap: 6px; }
+.gpp-common .grp { display: flex; flex-direction: column; gap: 4px; }
+.gpme-inl { display: flex; align-items: center; gap: 8px; }
+.gpp-browse { height: 200px; overflow: auto; background: #fff; border: 1px solid #a0a0a0; padding: 2px; }
+.gpp-bsrv { display: flex; align-items: center; gap: 4px; padding: 1px 2px; }
+.gpp-bitem { display: flex; align-items: center; gap: 4px; padding: 1px 2px 1px 22px; cursor: default; }
+.gpp-bsrv svg, .gpp-bitem svg { width: 16px; height: 16px; }
+.gpp-bitem.sel { background: #cce8ff; }
+.gpp-te-body { display: flex; flex-direction: column; gap: 6px; }
+.gpp-te-bar { display: flex; gap: 4px; padding-bottom: 4px; border-bottom: 1px solid #d9d9d9; }
+.gpp-te-list { height: 150px; overflow: auto; background: #fff; border: 1px solid #a0a0a0; padding: 2px; }
+.gpp-te-item { padding: 2px 4px; cursor: default; }
+.gpp-te-item.sel { background: #cce8ff; }
+.gpp-te-empty { color: #6d6d6d; padding: 6px; }
+.gpp-te-props { min-height: 96px; border: 1px solid #d9d9d9; padding: 8px; display: flex; flex-direction: column; gap: 4px; }

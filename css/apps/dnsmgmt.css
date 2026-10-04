@@ -1,0 +1,30 @@
+/* DNS Manager (dnsmgmt.msc) styles. */
+.dns-form { padding: 2px; }
+.dns-form p { margin: 6px 0 8px; }
+.dns-sub { padding-left: 22px; margin: 2px 0 8px; color: #333; }
+.dns-sub .inp { width: 100%; }
+.dns-inline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dns-inline > .inp:not(.num):not(.sel) { flex: 1; min-width: 0; }
+.dns-inline > span { white-space: nowrap; }
+.dns-warn { margin: 4px 0 6px; padding-left: 20px; position: relative; color: #1b1b1b; }
+.dns-warn::before { content: '!'; position: absolute; left: 2px; top: 1px; width: 13px; height: 13px; border-radius: 2px; background: #f7c600; color: #1b1b1b; font-weight: 700; font-size: 10px; line-height: 13px; text-align: center; }
+.dns-sumgrid { display: grid; grid-template-columns: max-content 1fr; column-gap: 12px; row-gap: 1px; }
+.dns-summary p { margin: 12px 0 0; }
+.dns-summary { border: 1px solid #828790; background: #fff; padding: 6px 8px; height: 150px; overflow: auto; margin: 8px 0; user-select: text; -webkit-user-select: text; }
+.dns-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-weight: 600; }
+.dns-head svg { width: 24px; height: 24px; }
+.dns-buttons { display: flex; justify-content: flex-end; gap: 8px; margin: 8px 0; }
+.dns-onetab .ps-pages { min-height: 0; }
+.dns-iplist, .dns-nslist { height: 150px; border: 1px solid #828790; }
+.dns-roots { height: 230px; border: 1px solid #828790; }
+.dns-typelist { height: 170px; border: 1px solid #828790; margin-bottom: 8px; }
+.dns-browse { height: 260px; border: 1px solid #828790; margin-top: 4px; }
+.dns-desc { border: 1px solid #828790; background: var(--w32-bg); min-height: 64px; padding: 4px 6px; margin-top: 3px; }
+.dns-ipbox { display: flex; gap: 8px; margin: 4px 0 8px; }
+.dns-ipmain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dns-ipmain .dns-iplist { border-bottom: 0; }
+.dns-ipmain .inp { width: 100%; }
+.dns-ipbtns { display: flex; flex-direction: column; gap: 6px; }
+.dns-xferlist { border: 1px solid #dcdcdc; background: #fff; padding: 4px 8px; min-height: 40px; margin: 4px 0 8px; }
+.dns-down { display: flex; gap: 14px; padding: 24px; max-width: 640px; }
+.dns-down > div:first-child svg { width: 32px; height: 32px; }

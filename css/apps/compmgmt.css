@@ -1,0 +1,55 @@
+/* Computer Management, Shared Folders (sf-), Local Users and Groups (lu-) and Device Manager (cm-) styles. */
+.cm-info { padding: 16px 22px; max-width: 660px; line-height: 1.45; user-select: text; -webkit-user-select: text; }
+.cm-info h3 { font-size: 15px; font-weight: 600; margin: 0 0 14px; color: #1b1b1b; }
+.cm-info p { margin: 0 0 10px; }
+.cm-devtree { flex: 1; min-height: 0; display: flex; background: #fff; }
+.cm-devtree .tv { flex: 1; border: 0; }
+.cm-devhead { display: flex; align-items: center; gap: 12px; margin: 2px 0 10px; }
+.cm-devic svg { width: 32px; height: 32px; display: block; }
+.cm-status { border: 1px solid #828790; background: #fff; height: 64px; padding: 3px 6px; }
+.cm-indent { padding-left: 20px; margin: 2px 0 8px; }
+.cm-wmi { line-height: 1.6; padding: 2px 0; user-select: text; -webkit-user-select: text; }
+
+/* Shared Folders */
+.sf-form > .chk:first-child { margin-top: 0; }
+.sf-p { margin: 0 0 8px; }
+.sf-note { margin: 10px 0 0; color: #555; }
+.sf-indent { padding-left: 22px; }
+.sf-line { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.sf-line > .inp { flex: 1; min-width: 0; }
+.sf-example { color: #555; margin: -2px 0 0 108px; }
+.sf-wz .frow { margin: 8px 0; }
+.sf-wz textarea.inp { width: 100%; resize: none; margin: 4px 0 8px; }
+.sf-wtext p { margin: 0 0 12px; color: #1b1b1b; }
+.sf-btnrow { display: flex; justify-content: flex-end; gap: 8px; margin: 4px 0; }
+.sf-btnrow.left { justify-content: flex-start; margin-top: 10px; }
+.sf-namebox { display: flex; flex: 1; }
+.sf-namebox > .inp { flex: 1; min-width: 0; }
+.sf-admin { padding: 30px 12px; text-align: center; color: #1b1b1b; }
+.sf-princ { border: 1px solid #828790; background: #fff; height: 104px; overflow: auto; margin: 4px 0 6px; outline: 0; }
+.sf-prin { display: flex; align-items: center; gap: 6px; padding: 1px 4px; border: 1px solid transparent; white-space: nowrap; }
+.sf-prin.sel { background: var(--w32-sel-inactive); }
+.sf-princ:focus .sf-prin.sel { background: var(--w32-sel); border-color: var(--w32-sel-border); }
+.sf-pic svg { width: 16px; height: 16px; display: block; }
+.sf-pbtns { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 8px; }
+.sf-ptable { border: 1px solid #828790; background: #fff; }
+.sf-phead, .sf-prow { display: grid; grid-template-columns: 1fr 56px 56px; align-items: center; padding: 2px 6px; }
+.sf-phead { border-bottom: 1px solid #e5e5e5; }
+.sf-pcol, .sf-pcb { text-align: center; }
+.sf-pcb input { margin: 0; }
+
+/* Local Users and Groups */
+.lu-form .frow { margin: 6px 0; }
+.lu-checks { margin-top: 8px; }
+.lu-p { margin: 0 0 8px; }
+.lu-p.ind { padding-left: 16px; }
+.lu-note { margin: 10px 0 0; color: #555; }
+.lu-head { display: flex; align-items: center; gap: 12px; margin: 2px 0 6px; }
+.lu-hic svg { width: 32px; height: 32px; display: block; }
+.lu-members { border: 1px solid #828790; background: #fff; height: 150px; overflow: auto; margin: 4px 0 6px; outline: 0; }
+.lu-mem { display: flex; align-items: center; gap: 6px; padding: 1px 4px; border: 1px solid transparent; white-space: nowrap; }
+.lu-mem.sel { background: var(--w32-sel-inactive); }
+.lu-members:focus .lu-mem.sel { background: var(--w32-sel); border-color: var(--w32-sel-border); }
+.lu-mic svg { width: 16px; height: 16px; display: block; }
+.lu-mbtns { display: flex; gap: 8px; }
+.lu-dc { padding: 16px 22px; max-width: 640px; line-height: 1.45; user-select: text; -webkit-user-select: text; }

@@ -1,0 +1,15 @@
+.aduc-form { padding: 4px; }
+.aduc-form > .fnote { margin-bottom: 12px; }
+.aduc-inline { display: flex; align-items: center; gap: 6px; }
+.aduc-inline > .inp { flex: 1; min-width: 60px; }
+.aduc-inline > .fvalue { flex: none; }
+.aduc-buttons { display: flex; justify-content: flex-end; gap: 8px; margin: 8px 0; }
+.aduc-destination { height: 260px; margin: 12px 0; border: 1px solid #828790; }
+.aduc-find-results { height: 235px; border: 1px solid #828790; margin-top: 8px; }
+.aduc-members { height: 200px; border: 1px solid #828790; }
+.aduc-empty { padding: 24px; max-width: 520px; }
+.aduc-object .fvalue { overflow-wrap: anywhere; }
+.aduc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-weight: 600; }
+.aduc-header svg { width: 32px; height: 32px; }
+.aduc-manager { display: flex; gap: 6px; }
+.aduc-manager > .inp { flex: 1; min-width: 0; }

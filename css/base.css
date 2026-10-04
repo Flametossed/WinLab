@@ -1,0 +1,228 @@
+/* Windows Server 2025 Lab Simulator - base + shell styles (skeleton) */
+:root {
+  --accent: #0067c0;
+  --accent-hover: #1975c5;
+  --text: #1b1b1b;
+  --text-2: #5d5d5d;
+  --surface: #f3f3f3;
+  --surface-2: #ffffff;
+  --border: #e0e0e0;
+  --taskbar-bg: rgba(238, 238, 238, 0.86);
+  --flyout-bg: rgba(242, 242, 242, 0.94);
+  --hover: rgba(0, 0, 0, 0.05);
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --taskbar-h: 48px;
+}
+:root[data-theme="dark"] {
+  --text: #ffffff; --text-2: #c5c5c5; --surface: #202020; --surface-2: #2b2b2b; --border: #3a3a3a;
+  --taskbar-bg: rgba(28, 28, 28, 0.86); --flyout-bg: rgba(36, 36, 36, 0.95); --hover: rgba(255, 255, 255, 0.07);
+  --accent: #4cc2ff;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+body { font: 14px/1.4 var(--font); color: var(--text); user-select: none; -webkit-user-select: none; }
+input, textarea, select, button { font: inherit; color: inherit; }
+#screen { position: fixed; inset: 0; overflow: hidden; }
+
+/* ---------- desktop ---------- */
+#desktop { position: absolute; inset: 0 0 var(--taskbar-h) 0; }
+#wallpaper {
+  position: absolute; inset: 0 0 calc(-1 * var(--taskbar-h)) 0;
+  background:
+    radial-gradient(ellipse 60% 45% at 62% 58%, rgba(120, 190, 255, 0.55), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 70% 52%, rgba(200, 230, 255, 0.45), transparent 70%),
+    radial-gradient(ellipse 90% 70% at 30% 30%, #0b3a7a, transparent 75%),
+    linear-gradient(160deg, #031a3d 0%, #0a3b82 55%, #062a5c 100%);
+}
+#desktop-icons { position: absolute; top: 8px; left: 8px; display: flex; flex-direction: column; gap: 4px; }
+.desk-icon { width: 76px; padding: 6px 2px; border-radius: 4px; text-align: center; color: #fff; font-size: 12px; text-shadow: 0 1px 2px rgba(0,0,0,.8); cursor: default; border: 1px solid transparent; }
+.desk-icon:hover { background: rgba(255,255,255,.12); }
+.desk-icon.sel { background: rgba(255,255,255,.22); border-color: rgba(255,255,255,.35); }
+.desk-icon:focus { outline: none; }
+.desk-icon svg { width: 40px; height: 40px; display: block; margin: 0 auto 4px; }
+#watermark { position: absolute; right: 14px; bottom: 8px; color: rgba(255,255,255,.85); font-size: 12px; text-align: right; line-height: 1.35; pointer-events: none; }
+#windows { position: absolute; inset: 0; pointer-events: none; } /* the layer spans the desktop; only windows take clicks */
+#windows > * { pointer-events: auto; }
+
+/* ---------- windows ---------- */
+.win { position: absolute; display: flex; flex-direction: column; background: var(--surface); border: 1px solid rgba(0,0,0,.25); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; min-width: 240px; min-height: 120px; animation: winIn .14s ease-out; }
+@keyframes winIn { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+.win.max { border-radius: 0; border: 0; }
+.win.snapped { border-radius: 0; } /* snapped windows lose the rounded corners, as maximized ones do */
+.win.min { display: none; }
+.win-titlebar { height: 32px; flex: none; display: flex; align-items: center; background: #f3f3f3; color: #1b1b1b; }
+.win:not(.active) .win-titlebar { color: #8a8a8a; }
+.win-titlebar .win-icon { width: 16px; height: 16px; margin: 0 8px 0 12px; flex: none; }
+.win-titlebar .win-icon svg { width: 16px; height: 16px; display: block; }
+.win-title { flex: 1; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.win-caption { display: flex; height: 100%; }
+.win-caption button { width: 46px; height: 100%; border: 0; background: transparent; display: grid; place-items: center; cursor: default; color: inherit; }
+.win-caption button:hover { background: rgba(0,0,0,.06); }
+.win-caption button.close:hover { background: #c42b1c; color: #fff; }
+.win-caption svg { width: 10px; height: 10px; }
+.win-body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; background: #fff; color: #1b1b1b; }
+.rz { position: absolute; z-index: 2; }
+.rz.n, .rz.s { left: 6px; right: 6px; height: 6px; cursor: ns-resize; }
+.rz.e, .rz.w { top: 6px; bottom: 6px; width: 6px; cursor: ew-resize; }
+.rz.n { top: -3px; } .rz.s { bottom: -3px; } .rz.e { right: -3px; } .rz.w { left: -3px; }
+.rz.ne, .rz.nw, .rz.se, .rz.sw { width: 12px; height: 12px; }
+.rz.ne { top: -3px; right: -3px; cursor: nesw-resize; } .rz.sw { bottom: -3px; left: -3px; cursor: nesw-resize; }
+.rz.nw { top: -3px; left: -3px; cursor: nwse-resize; } .rz.se { bottom: -3px; right: -3px; cursor: nwse-resize; }
+.win.max .rz { display: none; }
+
+/* ---------- taskbar ---------- */
+#taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: var(--taskbar-h); display: flex; align-items: center; padding: 0 4px; background: var(--taskbar-bg); backdrop-filter: blur(30px) saturate(1.4); border-top: 1px solid rgba(0,0,0,.08); z-index: 9000; }
+.tb-btn { position: relative; width: 40px; height: 40px; margin: 0 2px; border-radius: 4px; display: grid; place-items: center; border: 0; background: transparent; }
+.tb-btn:hover { background: var(--hover); }
+.tb-btn.active-app { background: rgba(255,255,255,.6); }
+:root[data-theme="dark"] .tb-btn.active-app { background: rgba(255,255,255,.1); }
+.tb-btn svg { width: 24px; height: 24px; }
+.tb-btn .ind { position: absolute; bottom: 2px; left: 50%; width: 6px; height: 3px; border-radius: 2px; background: #8a8a8a; transform: translateX(-50%); }
+.tb-btn.active-app .ind { width: 16px; background: var(--accent); }
+.tb-search { height: 32px; width: 200px; margin: 0 6px; border-radius: 16px; background: rgba(255,255,255,.75); border: 1px solid rgba(0,0,0,.08); display: flex; align-items: center; gap: 8px; padding: 0 12px; color: var(--text-2); font-size: 13px; }
+.tb-search svg, .start-search svg { width: 14px; height: 14px; flex: none; }
+.tb-spacer { flex: 1; }
+.tb-tray { display: flex; align-items: center; gap: 2px; height: 40px; }
+.tb-tray .tray-item { height: 40px; padding: 0 8px; border-radius: 4px; display: flex; align-items: center; gap: 8px; }
+.tb-tray .tray-item:hover { background: var(--hover); }
+.tb-tray svg { width: 16px; height: 16px; }
+.tb-clock { text-align: right; font-size: 12px; line-height: 16px; }
+
+/* ---------- start menu ---------- */
+.start-menu { position: absolute; left: 12px; bottom: calc(var(--taskbar-h) + 12px); width: 640px; max-width: calc(100vw - 24px); height: 640px; max-height: calc(100vh - var(--taskbar-h) - 24px); background: var(--flyout-bg); backdrop-filter: blur(40px) saturate(1.4); border: 1px solid rgba(0,0,0,.12); border-radius: 8px; box-shadow: var(--shadow); display: flex; flex-direction: column; z-index: 9500; animation: startIn .16s ease-out; }
+@keyframes startIn { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+.start-search { margin: 28px 32px 16px; height: 36px; border-radius: 18px; border: 1px solid rgba(0,0,0,.1); background: var(--surface-2); display: flex; align-items: center; gap: 10px; padding: 0 14px; }
+.start-search input { flex: 1; border: 0; outline: 0; background: transparent; font-size: 14px; }
+.start-section { padding: 0 32px; flex: 1; overflow: auto; }
+.start-section h3 { font-size: 14px; font-weight: 600; margin: 8px 0 12px 12px; }
+.start-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.start-app { height: 84px; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 12px; text-align: center; padding: 4px; }
+.start-app:hover { background: var(--hover); }
+.start-app svg { width: 32px; height: 32px; }
+.start-footer { height: 64px; flex: none; border-top: 1px solid rgba(0,0,0,.08); background: rgba(0,0,0,.03); display: flex; align-items: center; padding: 0 48px; border-radius: 0 0 8px 8px; }
+.start-user { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-radius: 4px; flex: 1; }
+.start-user .avatar { width: 32px; height: 32px; border-radius: 50%; background: #c8c8c8; display: grid; place-items: center; }
+.start-power { width: 40px; height: 40px; border-radius: 4px; display: grid; place-items: center; }
+.start-power:hover, .start-user:hover { background: var(--hover); }
+.menu { position: absolute; min-width: 180px; padding: 4px; background: var(--flyout-bg); backdrop-filter: blur(30px); border: 1px solid rgba(0,0,0,.12); border-radius: 8px; box-shadow: 0 8px 20px rgba(0,0,0,.22); z-index: 9800; }
+.menu-item { padding: 7px 12px; border-radius: 4px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
+.menu-item:hover { background: var(--hover); }
+.menu-sep { height: 1px; background: rgba(0,0,0,.1); margin: 4px 0; }
+
+/* ---------- overlays: boot / oobe / lock / login ---------- */
+.overlay { position: absolute; inset: 0; z-index: 10000; }
+.boot { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 90px; }
+.boot .logo { width: 110px; height: 110px; }
+.spinner { width: 40px; height: 40px; position: relative; }
+.spinner i { position: absolute; inset: 0; animation: spin 2.2s infinite; }
+.spinner i::before { content: ""; position: absolute; top: 0; left: 50%; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: #fff; }
+.spinner i:nth-child(2) { animation-delay: .12s; } .spinner i:nth-child(3) { animation-delay: .24s; }
+.spinner i:nth-child(4) { animation-delay: .36s; } .spinner i:nth-child(5) { animation-delay: .48s; }
+@keyframes spin { 0% { transform: rotate(0); opacity: 1; } 70% { transform: rotate(360deg); opacity: 1; } 71%,100% { transform: rotate(360deg); opacity: 0; } }
+.boot .status { color: #fff; font-size: 18px; margin-top: -60px; min-height: 26px; }
+
+.oobe { background: linear-gradient(160deg, #0a2a5c, #0b4a9c); color: #fff; display: flex; align-items: center; justify-content: center; }
+.oobe .panel { width: 560px; max-width: calc(100vw - 32px); }
+.oobe h1 { font-weight: 300; font-size: 34px; margin: 0 0 12px; }
+.oobe p { margin: 0 0 24px; color: #dbe7ff; }
+.oobe label { display: block; font-size: 13px; margin: 14px 0 4px; }
+.oobe input { width: 100%; height: 34px; border: 1px solid #8fb3e8; background: #fff; color: #000; padding: 0 10px; border-radius: 2px; }
+.oobe input[readonly] { background: #e8eef8; color: #555; }
+.oobe .err { color: #ffd0d0; font-size: 13px; min-height: 20px; margin-top: 10px; }
+.oobe .actions { text-align: right; margin-top: 18px; }
+.btn { min-width: 96px; height: 32px; padding: 0 16px; border-radius: 4px; border: 1px solid rgba(0,0,0,.15); background: #fbfbfb; color: #1b1b1b; cursor: default; }
+.btn:hover { background: #f0f0f0; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: var(--accent-hover); }
+
+.lock { color: #fff; cursor: default; }
+.lock .bg, .login .bg { position: absolute; inset: 0; background: inherit; }
+.lock .time { position: absolute; top: 12vh; left: 0; right: 0; text-align: center; font: 200 112px/1 "Segoe UI Variable Display", var(--font); text-shadow: 0 2px 12px rgba(0,0,0,.3); }
+.lock .date { position: absolute; top: calc(12vh + 124px); left: 0; right: 0; text-align: center; font-size: 22px; }
+.lock .hint { position: absolute; bottom: 40px; left: 0; right: 0; text-align: center; font-size: 16px; }
+.lock .hint small { display: block; opacity: .75; font-size: 12px; margin-top: 6px; }
+.login { color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(24px) brightness(.8); background: rgba(0, 20, 50, .35); }
+.login .avatar { width: 190px; height: 190px; border-radius: 50%; background: #d9d9d9; display: grid; place-items: center; }
+.login .avatar svg { width: 110px; height: 110px; }
+.login .name { font-size: 28px; margin: 18px 0 20px; }
+.login .pw { display: flex; width: 280px; }
+.login .pw input { flex: 1; height: 34px; border: 1px solid rgba(255,255,255,.5); border-right: 0; background: rgba(255,255,255,.92); color: #000; padding: 0 10px; outline: 0; border-radius: 4px 0 0 4px; }
+.login .pw button { width: 36px; border: 1px solid rgba(255,255,255,.5); background: rgba(255,255,255,.25); color: #fff; border-radius: 0 4px 4px 0; }
+.login .msg { min-height: 22px; margin-top: 14px; font-size: 14px; text-align: center; max-width: 360px; }
+.login .reset { position: absolute; bottom: 24px; left: 24px; font-size: 12px; opacity: .8; text-decoration: underline; cursor: pointer; }
+.login .pw.user { margin: 18px 0 10px; }
+.login .pw.user input { border-right: 1px solid rgba(255,255,255,.5); border-radius: 4px; }
+/* Interactive logon: Message title/text for users attempting to log on */
+.login.legal .legal-box { width: 560px; max-width: 80vw; text-align: left; }
+.login.legal .legal-title { font-size: 28px; font-weight: 300; margin-bottom: 18px; }
+.login.legal .legal-text { font-size: 15px; line-height: 1.5; white-space: pre-wrap; max-height: 50vh; overflow: auto; margin-bottom: 28px; }
+.login.legal .actions { display: flex; justify-content: flex-end; }
+.login.legal .actions .btn { min-width: 110px; }
+
+/* ---------- dialogs & context menus (js/core/ui.js) ---------- */
+#dialogs { position: absolute; inset: 0; z-index: 20000; pointer-events: none; }
+#dialogs > * { pointer-events: auto; }
+.dlg-shade { position: absolute; inset: 0; display: grid; place-items: center; isolation: isolate; }   /* a dialog's z-indexed parts (sheet tabs, list headers) stay under the dialogs opened over it */
+.dlg { background: #fff; color: #1b1b1b; border: 1px solid rgba(0,0,0,.3); border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,.35); overflow: hidden; max-width: calc(100vw - 32px); }
+.dlg.flash { animation: dlgFlash .3s 2; }
+@keyframes dlgFlash { 50% { box-shadow: 0 0 0 2px var(--accent), 0 12px 40px rgba(0,0,0,.35); } }
+.dlg-title { height: 32px; display: flex; align-items: center; padding-left: 12px; font-size: 12px; background: #f3f3f3; gap: 8px; }
+.dlg-title > span:nth-last-child(2) { flex: 1; }
+.dlg-ticon svg { width: 16px; height: 16px; display: block; }
+.dlg-x { width: 46px; height: 32px; border: 0; background: transparent; display: grid; place-items: center; }
+.dlg-x:hover { background: #c42b1c; color: #fff; }
+.dlg-x svg { width: 10px; height: 10px; }
+.dlg-body { padding: 18px 20px; font-size: 13px; }
+.dlg-buttons { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; background: #f0f0f0; border-top: 1px solid #e3e3e3; }
+.dlg-buttons .btn { min-width: 84px; height: 28px; font-size: 13px; }
+.msgbox { display: flex; gap: 14px; align-items: flex-start; }
+.msgbox-icon svg { width: 32px; height: 32px; display: block; }
+.msgbox-text { padding-top: 6px; line-height: 1.45; }
+.msgbox-detail { color: #555; margin-top: 8px; }
+.form-row { margin: 10px 0; }
+.form-row label { display: block; margin-bottom: 4px; }
+.form-row input[type=text] { width: 100%; height: 26px; border: 1px solid #b5b5b5; border-bottom-color: #868686; border-radius: 3px; padding: 0 6px; outline: 0; }
+.form-row input[type=text]:focus { border-bottom: 2px solid var(--accent); }
+.form-row input:disabled { background: #f3f3f3; color: #888; }
+.fieldset { border: 1px solid #d5d5d5; border-radius: 4px; padding: 6px 12px 10px; margin-top: 12px; }
+.fieldset legend { padding: 0 4px; }
+.radio { display: flex; align-items: center; gap: 6px; margin: 6px 0 4px; }
+.radio.disabled { color: #999; }
+.muted { color: #555; }
+.menu.ctx { position: fixed; }
+.menu-item.disabled { color: #999; }
+.menu-item.disabled:hover { background: transparent; }
+
+/* ---------- Lab Guide ---------- */
+.lab { flex: 1; overflow: auto; padding: 16px 18px; font-size: 13px; background: #fafafa; }
+.lab h2 { font-size: 18px; font-weight: 600; margin: 2px 0 6px; }
+.lab-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); font-weight: 600; }
+.lab-desc { color: #555; margin: 0 0 12px; }
+.lab-bar { height: 6px; border-radius: 3px; background: #e3e3e3; overflow: hidden; }
+.lab-bar > div { height: 100%; background: #0f7b0f; transition: width .3s; }
+.lab-count { color: #555; font-size: 12px; margin: 6px 0 12px; }
+.lab-obj { display: flex; gap: 10px; padding: 10px 12px; background: #fff; border: 1px solid #e3e3e3; border-radius: 6px; margin-bottom: 8px; }
+.lab-obj.done .lab-text { color: #555; }
+.lab-mark svg { width: 18px; height: 18px; display: block; margin-top: 1px; }
+.lab-hintlink { font-size: 12px; color: var(--accent); }
+.lab-links { display: flex; gap: 14px; }
+.lab-back { color: #5c5c5c; }
+.lab-hint { margin-top: 6px; padding: 8px 10px; background: #eef5fc; border-radius: 4px; color: #234; }
+.lab-complete { padding: 10px 12px; border-radius: 6px; background: #dff6dd; color: #0f5b0f; font-weight: 600; margin: 4px 0 8px; }
+.lab-actions { display: flex; gap: 8px; margin-top: 12px; }
+.lab-card { background: #fff; border: 1px solid #e3e3e3; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; }
+.lab-card-title { font-weight: 600; }
+.lab-meta { font-size: 12px; color: #666; margin: 2px 0 6px; }
+.lab-card-desc { color: #444; }
+.lab-card-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* Bug check (stop error) screen */
+.overlay.bsod { background: #0078d7; color: #fff; font-family: 'Segoe UI', system-ui, sans-serif; cursor: none; }
+.bsod-body { position: absolute; left: 11%; top: 15%; right: 8%; max-width: 900px; }
+.bsod-face { font-size: 128px; line-height: 1; margin-bottom: 34px; font-weight: 300; }
+.bsod-msg { font-size: 25px; line-height: 1.35; max-width: 820px; font-weight: 300; }
+.bsod-pct { font-size: 25px; margin: 30px 0 42px; font-weight: 300; }
+.bsod-more { display: flex; gap: 18px; font-size: 14px; line-height: 1.45; }
+.bsod-qr { width: 92px; height: 92px; flex: none; }
+.bsod-gap { margin-top: 20px; }

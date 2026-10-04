@@ -1,0 +1,324 @@
+/* Desktop apps (Roadmap step 7): Settings, Control Panel, Programs and Features, Microsoft Edge.
+ * &shot=about|rename|ethernet|editip|colors|background|apps|update|history|control|all|appwiz|updates|edge|refused|nxdomain|iis|404 */
+(async function () {
+  'use strict';
+  const WS = window.WS;
+  let pass = 0, fail = 0;
+  const t = (name, ok, detail) => { ok ? pass++ : fail++; console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${!ok && detail !== undefined ? ' :: ' + JSON.stringify(detail) : ''}`); };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const waitFor = async (fn, ms = 6000) => { const end = Date.now() + ms; while (Date.now() < end) { try { if (fn()) return true; } catch (e) { /* not yet */ } await wait(50); } return false; };
+  const shade = () => [...document.querySelectorAll('#dialogs .dlg-shade')].pop();
+  const dlgText = () => (shade() ? shade().textContent : '');
+  const click = async label => { const b = [...shade().querySelectorAll('button')].find(x => x.textContent.trim() === label); if (!b) throw new Error('Missing button: ' + label); b.click(); await wait(80); };
+  const stop = name => { if (new URLSearchParams(location.search).get('shot') !== name) return false; console.log(`RESULT ${pass} passed, ${fail} failed`); return true; };
+  const setSel = (root, field, value) => { const s = root.querySelector(`select[data-field="${field}"]`); s.value = value; s.dispatchEvent(new Event('change', { bubbles: true })); };
+  const policy = (side, key, value) => { const a = WS.state.gp.applied[side] = WS.state.gp.applied[side] || { settings: {} }; a.settings = a.settings || {}; if (value) a.settings[key] = { value }; else delete a.settings[key]; WS.store.changed('gpresult'); };
+  try {
+    await wait(300);
+    WS.wu.timeScale = 0.02;
+    /* ================================================================ Settings */
+    let win = WS.apps.launch('settings'); await wait(80);
+    const S = win.settings, el = () => win.el;
+    t('Settings opens on System with the left navigation', S.page() === 'system' && ['System', 'Network & internet', 'Personalization', 'Apps', 'Accounts', 'Time & language', 'Windows Update'].every(l => el().querySelector('.st-nav').textContent.includes(l)));
+    t('the user tile shows Administrator, Local Account', el().querySelector('.st-user').textContent.includes('Administrator') && el().querySelector('.st-user').textContent.includes('Local Account'));
+    t('Settings is SystemSettings.exe under Task Manager', WS.proc.list().some(p => p.image === 'SystemSettings.exe' && p.windows.includes(win)));
+    t('launching Settings again reuses the window', WS.apps.launch('settings', { page: 'about' }) === win && S.page() === 'about');
+    const prop = name => { const x = el().querySelector(`[data-prop="${name}"]`); return x ? x.textContent : null; };
+    t('About lists the device and Windows specifications', prop('Device name') === WS.sys.name && prop('Installed RAM') === '4.00 GB' && prop('Edition') === WS.state.system.edition && prop('Version') === '24H2' && prop('OS build') === WS.state.system.build);
+    if (stop('about')) return;
+    // search
+    t('search finds pages by keyword', S.search('time zone').includes('dateandtime') && S.search('dark').includes('colors') && S.search('rename').includes('about'));
+    S.search('dark');
+    el().querySelector('.st-result[data-page="colors"]').click(); await wait(40);
+    t('choosing a result opens the page', S.page() === 'colors');
+    S.back(); await wait(30);
+    t('Back returns', S.page() === 'about');
+    // Rename this PC
+    let rd = null;
+    let busy = WS.settings.renameDialog({ onCreate: d => { rd = d; } }); await wait(60);
+    t('Rename this PC asks for the new name', !!rd && rd.stage === 'name' && document.querySelector('.st-dialog').textContent.includes('Current PC name: ' + WS.sys.name));
+    rd.input.value = 'BAD NAME'; rd.buttons[0].click(); await wait(60);
+    t('an invalid name is refused in place', rd.err.textContent.length > 0 && !!document.querySelector('.st-dialog.rename'));
+    if (stop('rename')) return;
+    rd.input.value = 'dc01'; rd.buttons[0].click(); await wait(80);
+    t('a good name moves on to Restart now / Restart later', document.querySelector('.st-dialog').textContent.includes('Restart your PC to apply these changes') && document.querySelector('.st-dialog').textContent.includes('Restart later'));
+    [...document.querySelectorAll('.st-dialog button')].find(b => b.textContent === 'Restart later').click();
+    await busy; await wait(60);
+    t('the rename waits for the restart (same model as sysdm.cpl)', WS.state.system.pendingComputerName === 'DC01' && WS.sys.restartPending());
+    t('About shows the pending name', el().textContent.includes('This PC will be renamed to DC01 after you restart.'));
+    // Remote Desktop
+    S.go('remotedesktop'); await wait(30);
+    el().querySelector('[data-field="rdp"]').click(); await wait(60);
+    t('turning Remote Desktop on asks to confirm', document.querySelector('.st-dialog') && document.querySelector('.st-dialog').textContent.includes('Enable Remote Desktop?'));
+    [...document.querySelectorAll('.st-dialog button')].find(b => b.textContent === 'Confirm').click(); await wait(80);
+    t('Confirm enables Remote Desktop (rule group and TermService too)', WS.state.system.rdpEnabled && WS.fw.rules({ group: 'Remote Desktop' }).some(r => r.enabled) && WS.svc.isRunning('TermService'));
+    WS.sys.setRemoteDesktop(false);
+
+    /* ---- Network & internet ---- */
+    S.go('network-ethernet'); await wait(40);
+    const a = WS.net.adapter();
+    t('Ethernet shows DHCP assignment and the adapter properties', el().querySelector('[data-card="ip"]').textContent.includes('Automatic (DHCP)') && prop('Physical address (MAC):') === a.mac && prop('Description:') === 'Microsoft Hyper-V Network Adapter' && prop('IPv4 address:') === a.ip);
+    if (stop('ethernet')) return;
+    let ip = null;
+    busy = WS.settings.editIp({ onCreate: d => { ip = d; } }); await wait(60);
+    t('Edit IP settings opens with Automatic (DHCP)', !!ip && ip.mode.value === 'dhcp' && getComputedStyle(ip.ip.closest('.st-fields')).display === 'none');
+    ip.mode.value = 'manual'; ip.mode.dispatchEvent(new Event('change')); await wait(20);
+    ip.ip.value = '192.168.1.10'; ip.mask.value = '255.255.255.0'; ip.gw.value = '192.168.1.1'; ip.d1.value = '127.0.0.1'; ip.d2.value = '192.168.1.1';
+    if (stop('editip')) return;
+    ip.ip.value = '192.168.1.255'; ip.buttons[0].click(); await wait(60);
+    t('a broadcast address is refused with the Windows message', /The combination of IP address and subnet mask is invalid/.test(ip.err.textContent));
+    ip.ip.value = '192.168.1.10'; ip.buttons[0].click(); await busy; await wait(60);
+    const a2 = WS.net.adapter();
+    t('Save applies a static address and DNS servers', !a2.dhcp && a2.ip === '192.168.1.10' && a2.prefix === 24 && a2.gateway === '192.168.1.1' && a2.dnsServers.join(',') === '127.0.0.1,192.168.1.1');
+    t('the Ethernet page now says Manual', el().querySelector('[data-card="ip"]').textContent.includes('Manual'));
+    let dn = null;
+    busy = WS.settings.editDns({ onCreate: d => { dn = d; } }); await wait(40);
+    dn.d1.value = '192.168.1.1'; dn.d2.value = ''; dn.buttons[0].click(); await busy;
+    t('Edit DNS settings sets the DNS servers', WS.net.adapter().dnsServers.join(',') === '192.168.1.1');
+    t('Get-DnsClientServerAddress sees the same (model shared with PowerShell)', WS.net.adapter().dnsDhcp === false);
+    busy = WS.settings.editIp({ onCreate: d => { ip = d; } }); await wait(40);
+    ip.mode.value = 'dhcp'; ip.mode.dispatchEvent(new Event('change')); ip.buttons[0].click(); await busy;
+    t('back to Automatic (DHCP) for IP and DNS', WS.net.adapter().dhcp && WS.net.adapter().dnsDhcp);
+    S.go('network-ethernet'); await wait(30);
+    el().querySelector('[data-field="category-private"]').click(); await wait(40);
+    t('Network profile type: Private (the firewall\u2019s network category)', WS.fw.activeProfile() === 'Private');
+    WS.fw.setNetworkCategory('Public');
+
+    /* ---- Personalization ---- */
+    S.go('colors'); await wait(30);
+    setSel(el(), 'mode', 'dark'); await wait(60);
+    t('Colors > Dark makes Windows and apps dark', WS.personal.get().mode === 'dark' && WS.personal.get().appMode === 'dark' && document.documentElement.dataset.appsTheme === 'dark');
+    t('Settings itself goes dark (app mode)', getComputedStyle(el().querySelector('.st')).backgroundColor === 'rgb(32, 32, 32)' && getComputedStyle(win.el.querySelector('.win-titlebar')).backgroundColor === 'rgb(32, 32, 32)');
+    setSel(el(), 'mode', 'custom'); await wait(60);
+    setSel(el(), 'appmode', 'light'); await wait(60);
+    t('Custom: dark Windows mode with light apps', WS.personal.get().mode === 'dark' && WS.personal.get().appMode === 'light' && document.documentElement.dataset.theme === 'dark');
+    el().querySelector('[data-accent="#107c10"]').click(); await wait(40);
+    t('an accent colour sets --accent', getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() === '#107c10');
+    el().querySelector('[data-field="accenttaskbar"]').click(); await wait(40);
+    t('Show accent color on Start and taskbar (dark mode only)', WS.personal.get().accentOnTaskbar && document.documentElement.dataset.accentTaskbar === 'on');
+    if (stop('colors')) return;
+    setSel(el(), 'mode', 'light'); await wait(40);
+    t('Light turns accent-on-taskbar off again', WS.personal.get().mode === 'light' && !WS.personal.get().accentOnTaskbar);
+    WS.personal.set({ accent: WS.personal.DEFAULT_ACCENT });
+    S.go('personalization-background'); await wait(30);
+    el().querySelector('[data-pic="img19"]').click(); await wait(40);
+    t('Background > a picture changes the wallpaper', WS.personal.get().background.picture === 'img19' && document.getElementById('wallpaper').style.background.includes('rgb(18, 10, 51)'));
+    setSel(el(), 'bgkind', 'solid'); await wait(40);
+    el().querySelector('[data-color="#0063b1"]').click(); await wait(40);
+    t('Solid color', WS.personal.get().background.kind === 'solid' && /rgb\(0, 99, 177\)/.test(document.getElementById('wallpaper').style.background));
+    if (stop('background')) return;
+    policy('user', 'Wallpaper', { state: 'Enabled', options: { Wallpaper: 'C:\\Windows\\Web\\Wallpaper\\Windows\\img21.jpg', WallpaperStyle: 4 } }); await wait(60);
+    S.go('personalization-background'); await wait(30);
+    t('the Desktop Wallpaper policy wins and Settings says it is managed', WS.personal.background().picture === 'img21' && el().textContent.includes('managed by your organization') && el().querySelector('[data-pic="img0"]').disabled);
+    policy('user', 'Wallpaper', { state: 'Enabled', options: { Wallpaper: 'C:\\missing.jpg' } }); await wait(40);
+    t('a policy wallpaper that doesn\u2019t exist shows black', WS.personal.background().color === '#000000');
+    policy('user', 'Wallpaper', null);
+    WS.personal.set({ background: { kind: 'picture', picture: 'img0' } });
+    S.go('taskbar'); await wait(30);
+    setSel(el(), 'align', 'center'); await wait(60);
+    t('Taskbar > alignment Center', document.documentElement.dataset.taskbarAlign === 'center');
+    setSel(el(), 'align', 'left'); await wait(30);
+
+    /* ---- Apps ---- */
+    S.go('appsfeatures'); await wait(40);
+    t('Installed apps lists the programs', ['Microsoft Edge', 'Microsoft Edge WebView2 Runtime', 'Microsoft Visual C++ 2015-2022 Redistributable (x64) - 14.40.33810'].every(n => el().textContent.includes(n)) && el().textContent.includes('3 apps found'));
+    if (stop('apps')) return;
+    el().querySelector('[data-app="Microsoft Edge"]').click(); await wait(40);
+    t('Edge can\u2019t be uninstalled (greyed)', [...document.querySelectorAll('.menu.ctx .menu-item')].find(x => x.textContent.includes('Uninstall')).classList.contains('disabled'));
+    WS.ui.closeMenu();
+    el().querySelector('[data-app^="Microsoft Visual C++"]').click(); await wait(40);
+    [...document.querySelectorAll('.menu.ctx .menu-item')].find(x => x.textContent.includes('Uninstall')).click(); await wait(60);
+    t('Uninstall asks first', document.querySelector('.st-dialog').textContent.includes('This app and its related info will be uninstalled.'));
+    [...document.querySelectorAll('.st-dialog button')].find(b => b.textContent === 'Uninstall').click(); await wait(80);
+    t('...and removes it (MsiInstaller 11724 in Application)', !WS.programs.find('vcredist') && el().textContent.includes('2 apps found') && WS.state.events.logs.Application.slice(-3).some(e => e.id === 11724));
+    WS.proc.addStartup({ id: 'contoso', name: 'Contoso Agent', publisher: 'Contoso', command: 'C:\\Contoso\\agent.exe', enabled: true, impact: 'High' });
+    S.go('startupapps'); await wait(30);
+    el().querySelector('[data-field="startup-contoso"]').click(); await wait(30);
+    t('Startup apps toggles the same entries as Task Manager', WS.proc.startupApps().find(e => e.id === 'contoso').enabled === false);
+
+    /* ---- Time & language ---- */
+    S.go('dateandtime'); await wait(30);
+    setSel(el(), 'timezone', 'Tokyo Standard Time'); await wait(30);
+    t('Time zone sets the server time zone (Get-TimeZone, Server Manager)', WS.state.system.timeZoneId === 'Tokyo Standard Time' && WS.state.system.timeZone.includes('Osaka, Sapporo, Tokyo'));
+    t('the big clock shows the server\u2019s time', el().querySelector('.st-clock').textContent.startsWith(WS.util.fmtTime(WS.sys.now())));
+    WS.sys.setTimeZone('Pacific Standard Time');
+    el().querySelector('[data-action="sync"]').click();
+    await waitFor(() => el().textContent.includes('Last successful time synchronization: ') && !el().textContent.includes('synchronization: Never'), 3000);
+    t('Sync now reaches time.windows.com through the lab Internet', el().textContent.includes('Time server: time.windows.com') && !el().textContent.includes('Time synchronization failed'));
+    WS.state.network.lan.internet = false;
+    el().querySelector('[data-action="sync"]').click();
+    t('without Internet access it fails', await waitFor(() => el().textContent.includes('Time synchronization failed'), 3000));
+
+    /* ---- Windows Update ---- */
+    S.go('windowsupdate'); await wait(30);
+    el().querySelector('[data-action="check"]').click();
+    await waitFor(() => WS.wu.state().status === 'error', 3000); await wait(40);
+    t('with no Internet, checking fails with the Windows Update error', el().textContent.includes('There were problems checking for updates') && el().textContent.includes('0x8024401c') && WS.state.events.logs.System.some(e => e.id === 20 && e.source === 'Microsoft-Windows-WindowsUpdateClient'));
+    WS.state.network.lan.internet = true; WS.store.changed('network');
+    el().querySelector('[data-action="retry"]').click();
+    await waitFor(() => WS.wu.state().status === 'available', 3000); await wait(40);
+    t('Retry finds the four updates', WS.wu.state().items.length === 4 && el().textContent.includes('Updates available') && el().textContent.includes('KB5046617') && el().textContent.includes('Pending download'));
+    if (stop('update')) return;
+    el().querySelector('[data-action="install"]').click();
+    await waitFor(() => WS.wu.state().status === 'restart', 6000); await wait(40);
+    t('Download & install all leaves the cumulative update pending a restart', el().textContent.includes('Restart required') && el().textContent.includes('Pending restart') && WS.sys.restartPending());
+    t('the others are installed now (events 43 and 19)', WS.wu.history().some(x => x.kb === 'KB2267602') && WS.wu.history().some(x => x.kb === 'KB5045934') && WS.state.events.logs.System.filter(e => e.id === 19).length >= 4);
+    t('a toast says a restart is required', WS.shell.notifications().some(n => n.app === 'Windows Update' && n.title === 'Restart required'));
+    t('Get-HotFix already lists the .NET update but not the pending CU', WS.wu.hotfixes().some(x => x.kb === 'KB5045934') && !WS.wu.hotfixes().some(x => x.kb === 'KB5046617'));
+    const sm = WS.sm.open('local'); await wait(80);
+    t('Server Manager shows Last installed updates and Last checked as Today', /Last installed updates\s*Today at/.test(sm.el.textContent) && /Last checked for updates\s*Today at/.test(sm.el.textContent));
+    win.restore();
+    const buildBefore = WS.state.system.build;
+    // Restart now: the update restart (no tracker), event 1074 from svchost for "Operating System: Service pack (Planned)"
+    el().querySelector('[data-action="restart"]').click();
+    await waitFor(() => WS.shell.isLocked(), 9000);
+    const e1074 = WS.state.events.logs.System.filter(e => e.id === 1074).pop();
+    t('Restart now restarts with the Windows Update reason', e1074.message.includes('Operating System: Service pack (Planned)') && e1074.message.includes('0x80020010') && e1074.user === 'NT AUTHORITY\\SYSTEM');
+    t('the restart finishes the cumulative update and raises the build', WS.state.system.build === '26100.2314' && buildBefore !== '26100.2314' && WS.wu.hotfixes().some(x => x.kb === 'KB5046617') && WS.state.system.computerName === 'DC01');
+    WS.shell.startSession('Administrator'); await wait(150);
+    WS.wm.closeAll();
+    win = WS.apps.launch('settings', { page: 'windowsupdate-history' }); await wait(60);
+    t('Update history lists quality, definition and other updates', win.el.textContent.includes('Quality Updates (2)') && win.el.textContent.includes('Definition Updates (1)') && win.el.textContent.includes('Other Updates (1)') && win.el.textContent.includes('Successfully installed on'));
+    if (stop('history')) return;
+    win.settings.go('windowsupdate'); await wait(30);
+    win.el.querySelector('[data-action="check"]').click();
+    await waitFor(() => WS.wu.state().status === 'uptodate', 3000); await wait(40);
+    t('checking again: You\u2019re up to date', win.el.textContent.includes('You\u2019re up to date'));
+    // Prohibit access to Control Panel and PC settings
+    win.close();
+    policy('user', 'NoControlPanel', { state: 'Enabled', options: {} });
+    WS.apps.launch('settings'); await wait(60);
+    t('Prohibit access to Control Panel and PC settings blocks Settings', dlgText().includes('This operation has been cancelled due to restrictions') && !WS.wm.find('settings'));
+    await click('OK');
+    policy('user', 'NoControlPanel', null);
+
+    /* ================================================================ Control Panel */
+    const cpw = WS.apps.launch('control'); await wait(60);
+    t('Control Panel opens on the category view', cpw.cpanel.page() === 'home' && ['System and Security', 'Network and Internet', 'Hardware', 'Programs', 'User Accounts', 'Appearance and Personalization', 'Clock and Region', 'Ease of Access'].every(c => cpw.el.querySelector(`[data-cat="${c === 'System and Security' ? 'system' : ''}"]`) || cpw.el.textContent.includes(c)));
+    t('...with "Adjust your computer\u2019s settings" and View by: Category', cpw.el.textContent.includes('Adjust your computer\u2019s settings') && cpw.el.querySelector('[data-field="viewby"]').value === 'category');
+    if (stop('control')) return;
+    [...cpw.el.querySelectorAll('[data-link="Uninstall a program"]')][0].click(); await wait(80);
+    t('Programs > Uninstall a program opens Programs and Features', !!WS.wm.find('appwiz'));
+    WS.wm.find('appwiz').close();
+    setSel(cpw.el, 'viewby', 'large'); await wait(40);
+    t('View by: Large icons lists All Control Panel Items', cpw.cpanel.page() === 'all' && cpw.el.querySelectorAll('.cpl-item').length >= 25 && !!cpw.el.querySelector('[data-item="Windows Tools"]'));
+    if (stop('all')) return;
+    cpw.el.querySelector('[data-item="Date and Time"]').click(); await wait(80);
+    t('Date and Time opens timedate.cpl', dlgText().includes('Time zone'));
+    await click('OK');
+    cpw.el.querySelector('[data-item="Windows Tools"]').click(); await wait(40);
+    t('Windows Tools lists the tools Server Manager lists', cpw.cpanel.page() === 'tools' && !!cpw.el.querySelector('[data-tool="Event Viewer"]') && !!cpw.el.querySelector('[data-tool="Services"]') && !cpw.el.querySelector('[data-tool="DNS"]'));
+    cpw.el.querySelector('[data-tool="Services"]').click(); await wait(80);
+    t('...and opens them', !!WS.wm.find('services'));
+    WS.wm.find('services').close();
+    cpw.cpanel.item('User Accounts'); await wait(30);
+    t('User Accounts shows the account card', cpw.el.textContent.includes('Make changes to your user account') && cpw.el.textContent.includes('Password protected'));
+    const found = cpw.cpanel.search('firewall');
+    t('Search Control Panel finds Windows Defender Firewall', cpw.cpanel.page() === 'search' && found.includes('Windows Defender Firewall') && found.includes('Check firewall status'));
+    cpw.cpanel.search('');
+    policy('user', 'DisallowCpl', { state: 'Enabled', options: { DisallowCplList: ['Microsoft.WindowsFirewall', 'Fonts'] } }); await wait(60);
+    cpw.cpanel.go('all'); await wait(30);
+    t('Hide specified Control Panel items (canonical or display names)', !cpw.el.querySelector('[data-item="Windows Defender Firewall"]') && !cpw.el.querySelector('[data-item="Fonts"]') && !!cpw.el.querySelector('[data-item="System"]'));
+    policy('user', 'DisallowCpl', null);
+    cpw.close();
+
+    /* ================================================================ Programs and Features */
+    const aw = WS.apps.launch('appwiz'); await wait(60);
+    t('Programs and Features: "Uninstall or change a program" with the list', aw.el.textContent.includes('Uninstall or change a program') && aw.el.textContent.includes('Microsoft Edge') && aw.el.textContent.includes('2 programs installed'));
+    t('it runs inside explorer.exe', WS.proc.list().find(p => p.shell).windows.includes(aw));
+    WS.programs.define({ id: 'notepadpp', name: 'Notepad++ (64-bit x64)', publisher: 'Notepad++ Team', version: '8.6.9', sizeKB: 15400 }); await wait(40);
+    t('a lab-defined program shows up', aw.el.textContent.includes('Notepad++ (64-bit x64)') && aw.el.textContent.includes('3 programs installed'));
+    aw.appwiz.select('Microsoft Edge'); await wait(20);
+    t('Uninstall is greyed for Edge', aw.el.querySelector('[data-action="uninstall"]').disabled);
+    if (stop('appwiz')) return;
+    aw.appwiz.select('Notepad++ (64-bit x64)'); await wait(20);
+    busy = aw.appwiz.uninstall(); await wait(60);
+    t('Uninstall asks "Are you sure you want to uninstall ...?"', dlgText().includes('Are you sure you want to uninstall Notepad++ (64-bit x64)?'));
+    await click('Yes'); await busy;
+    t('...and removes it', !WS.programs.find('notepadpp') && aw.el.textContent.includes('2 programs installed'));
+    aw.appwiz.go('updates'); await wait(40);
+    t('View installed updates lists the hotfixes, CU included', aw.el.textContent.includes('Uninstall an update') && aw.el.textContent.includes('Security Update for Microsoft Windows (KB5046617)') && aw.el.textContent.includes('Microsoft Windows (4)'));
+    if (stop('updates')) return;
+    aw.close();
+    policy('user', 'NoProgramsAndFeatures', { state: 'Enabled', options: {} });
+    WS.apps.launch('appwiz'); await wait(60);
+    t('Hide "Programs and Features" page', dlgText().includes('Your system administrator has disabled Programs and Features.'));
+    await click('OK');
+    policy('user', 'NoProgramsAndFeatures', null);
+
+    /* ================================================================ Microsoft Edge */
+    const ed = WS.apps.launch('edge'); await wait(80);
+    const E = ed.edge;
+    t('Edge opens a New tab', E.title() === 'New tab' && !!ed.el.querySelector('.ed-nt-search') && ed.el.querySelector('.win-title').textContent === 'New tab - Microsoft Edge');
+    t('it is msedge.exe', WS.proc.list().some(p => p.image === 'msedge.exe' && p.windows.includes(ed)));
+    if (stop('edge')) return;
+    E.go('localhost'); await wait(40);
+    t('localhost without IIS: refused (ERR_CONNECTION_REFUSED)', E.url() === 'http://localhost' && E.result().code === 'ERR_CONNECTION_REFUSED' && ed.el.textContent.includes('localhost refused to connect.'));
+    if (stop('refused')) return;
+    E.go('nosuchhost.contoso.test'); await wait(40);
+    t('an unknown name: DNS_PROBE_FINISHED_NXDOMAIN', E.result().code === 'DNS_PROBE_FINISHED_NXDOMAIN' && ed.el.textContent.includes('Check if there is a typo in nosuchhost.contoso.test.'));
+    if (stop('nxdomain')) return;
+    E.go('www.example.com'); await wait(40);
+    t('a reachable Internet site shows the lab page with how it was resolved', E.result().kind === 'external' && ed.el.textContent.includes('93.184.215.14') && ed.el.textContent.includes('resolved by the DNS server'));
+    E.go('dns over https'); await wait(40);
+    t('text that isn\u2019t an address becomes a search', /^https:\/\/www\.bing\.com\/search\?q=dns\+over\+https/.test(E.url()) && E.title() === 'dns over https - Search');
+    E.go('http://192.168.1.1'); await wait(40);
+    t('a LAN machine with no web server refuses', E.result().code === 'ERR_CONNECTION_REFUSED', [E.result().code, WS.net.adapter().ip, WS.net.route('192.168.1.50')]);
+    WS.state.network.lan.internet = false;
+    E.go('www.bing.com'); await wait(40);
+    t('without Internet: ERR_CONNECTION_TIMED_OUT', E.result().code === 'ERR_CONNECTION_TIMED_OUT');
+    WS.state.network.lan.internet = true;
+    E.back(); await wait(30);
+    t('Back goes to the previous page', E.url() === 'http://192.168.1.1');
+    E.forward(); await wait(30);
+    t('Forward returns', /bing\.com/.test(E.url()));
+    // IIS
+    WS.features.install(['Web-Server']); await wait(60);
+    t('installing Web Server (IIS) lays down C:\\inetpub\\wwwroot\\iisstart.htm', WS.fs.exists('C:\\inetpub\\wwwroot\\iisstart.htm') && WS.svc.isRunning('W3SVC'));
+    E.go('http://localhost/'); await waitFor(() => E.frameDoc() && E.frameDoc().title === 'IIS Windows Server', 3000);
+    t('http://localhost shows the IIS start page', E.title() === 'IIS Windows Server' && E.text().includes('Internet Information Services'));
+    t('the page renders in a sandbox without scripts', ed.el.querySelector('iframe.ed-frame').getAttribute('sandbox') === 'allow-same-origin');
+    if (stop('iis')) return;
+    E.go(`http://${WS.sys.name}`); await wait(60);
+    t('the server\u2019s own name works too', E.title() === 'IIS Windows Server');
+    WS.fs.writeFile('C:\\inetpub\\wwwroot\\index.html', '<html><head><title>Contoso Intranet</title></head><body><h1>Welcome to Contoso</h1><a href="/about.htm">About</a></body></html>');
+    WS.fs.writeFile('C:\\inetpub\\wwwroot\\about.htm', '<html><head><title>About Contoso</title></head><body>About page</body></html>');
+    E.refresh(); await waitFor(() => E.frameDoc() && E.frameDoc().title === 'Contoso Intranet', 3000);
+    t('index.html comes before iisstart.htm (default document order)', E.title() === 'Contoso Intranet');
+    E.frameDoc().querySelector('a').click(); await wait(80);
+    t('links in the page navigate the tab', E.url() === `http://${WS.sys.name.toLowerCase()}/about.htm` && E.title() === 'About Contoso', E.url());
+    E.go('http://localhost/missing.htm'); await wait(40);
+    t('a missing file: IIS detailed 404.0 with the physical path', E.result().code === 'HTTP 404.0' && ed.el.textContent.includes('HTTP Error 404.0 - Not Found') && ed.el.textContent.includes('C:\\inetpub\\wwwroot\\missing.htm') && E.title() === 'IIS 10.0 Detailed Error - 404.0 - Not Found');
+    if (stop('404')) return;
+    WS.fs.mkdir('C:\\inetpub\\wwwroot\\empty');
+    E.go('http://localhost/empty/'); await wait(40);
+    t('a folder without a default document: 403.14', E.result().code === 'HTTP 403.14' && ed.el.textContent.includes('The Web server is configured to not list the contents of this directory.'));
+    WS.fs.writeFile('C:\\inetpub\\wwwroot\\app.xyz', 'x');
+    E.go('http://localhost/app.xyz'); await wait(40);
+    t('an unknown extension: 404.3', E.result().code === 'HTTP 404.3');
+    E.go('https://localhost'); await wait(40);
+    t('https has no binding: refused', E.result().code === 'ERR_CONNECTION_REFUSED');
+    WS.svc.stop('W3SVC'); E.go('http://localhost'); await wait(40);
+    t('stopping W3SVC makes localhost refuse', E.result().code === 'ERR_CONNECTION_REFUSED');
+    WS.svc.start('W3SVC');
+    // file:///
+    E.go('C:\\inetpub\\wwwroot'); await wait(40);
+    t('a local path shows the folder index', E.url() === 'file:///C:/inetpub/wwwroot' && ed.el.textContent.includes('Index of C:/inetpub/wwwroot') && ed.el.textContent.includes('index.html'));
+    [...ed.el.querySelectorAll('.ed-doc a')].find(x => x.textContent === 'empty/').click(); await wait(40);
+    t('folder links navigate', E.url() === 'file:///C:/inetpub/wwwroot/empty');
+    // tabs, Run and start
+    E.newTab('edge://version'); await wait(40);
+    t('a second tab shows edge://version', E.tabs().length === 2 && ed.el.textContent.includes(WS.edge.VERSION) && ed.el.textContent.includes(WS.state.system.build));
+    const r = WS.term.resolveLaunch('http://localhost');
+    WS.term.launchResolved(r); await wait(60);
+    t('Run / start with a URL opens a tab in the running Edge', WS.wm.windows.filter(w => w.app === 'edge').length === 1 && E.tabs().length === 3 && E.url() === 'http://localhost');
+    ed.el.querySelectorAll('.ed-tx')[2].click(); await wait(30);
+    t('closing a tab', E.tabs().length === 2);
+    E.closeTab(); E.closeTab(); await wait(30);
+    t('closing the last tab closes Edge', !WS.wm.find('edge'));
+  } catch (e) {
+    fail++;
+    console.log('FAIL exception: ' + (e && e.stack || e));
+  }
+  console.log(`RESULT ${pass} passed, ${fail} failed`);
+})();

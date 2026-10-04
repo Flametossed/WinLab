@@ -1,0 +1,28 @@
+.terminal-window .win-body { display:flex; flex-direction:column; background:#202020; overflow:hidden; }
+.terminal-window .win-titlebar { background:#202020; color:#eee; }
+.terminal-window .win-caption button { color:#eee; }
+.term-tabs { display:flex; align-items:center; gap:3px; padding:5px 8px 0; flex:none; background:#202020; overflow-x:auto; }
+.term-tab-wrap { display:flex; align-items:center; border-radius:7px 7px 0 0; background:#303030; flex:none; }
+.term-tab-wrap:has([aria-selected="true"]) { background:#012456; }
+.term-tab-cmd:has([aria-selected="true"]) { background:#0c0c0c; }
+.term-tabs button { border:0; background:transparent; color:#eee; cursor:pointer; font:12px 'Segoe UI',sans-serif; }
+.term-tab { display:flex; align-items:center; gap:9px; padding:9px 12px; }
+.term-profile { font:12px Consolas,monospace; }
+.term-tabs .term-tab-close { font-size:18px; padding:3px 9px; margin-right:3px; border-radius:4px; }
+.term-tabs .term-add,.term-tabs .term-dropdown { font-size:20px; padding:4px 9px; border-radius:4px; }
+.term-tabs button:hover { background:#ffffff18; }
+.term-tabs .term-clipboard { padding:7px 10px; border-radius:4px; }
+.term-tabs button:focus-visible { outline:1px solid #aaa; outline-offset:-2px; }
+.term-pages,.term-page { display:flex; flex:1; min-height:0; min-width:0; }
+.term-page[hidden] { display:none; }
+.term { position:relative; display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; font:14px/1.35 'Cascadia Mono',Consolas,'Courier New',monospace; }
+.term-scroll { overflow:auto; flex:1; padding:10px 12px; scrollbar-color:#666 transparent; user-select:text; -webkit-user-select:text; }
+.term-scroll:focus { outline:none; }
+.term-out,.term-line { white-space:pre-wrap; overflow-wrap:anywhere; tab-size:8; }
+.term-scroll ::selection { background:#cccccc; color:#0c0c0c; }
+::highlight(terminal-selection) { background-color:#cccccc; color:#0c0c0c; }
+.term-cur { background:currentColor; color:inherit; box-shadow:inset 0 -2px #ccc; animation:term-blink 1.1s step-end infinite; }
+.term-kbd { position:absolute; left:12px; bottom:0; width:1px; height:1px; padding:0; border:0; opacity:0; resize:none; }
+.term-progress { white-space:pre-wrap; color:#ffff00; background:#008080; padding:5px 12px; flex:none; }
+@keyframes term-blink { 50% { background:transparent; box-shadow:none; } }
+@media (prefers-reduced-motion:reduce) { .term-cur { animation:none; } }
