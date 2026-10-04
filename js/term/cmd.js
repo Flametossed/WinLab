@@ -273,7 +273,8 @@
     let files = 0, bytes = 0, dirs = 0;
     if (!isRoot && !pattern) { o.line(`${dirDate(self.modified)}    <DIR>          .`); o.line(`${dirDate(self.modified)}    <DIR>          ..`); dirs += 2; }
     for (const it of items) {
-      if (it.type === 'dir') { o.line(`${dirDate(it.modified)}    <DIR>          ${it.name}`); dirs++; }
+      if (it.junction) { o.line(`${dirDate(it.modified)}    <JUNCTION>     ${it.name} [${it.junction.replace(/^\\\\\?\\/, '\\??\\')}]`); dirs++; }
+      else if (it.type === 'dir') { o.line(`${dirDate(it.modified)}    <DIR>          ${it.name}`); dirs++; }
       else { o.line(`${dirDate(it.modified)}    ${it.size.toLocaleString('en-US').padStart(14)} ${it.name}`); files++; bytes += it.size; }
     }
     const free = v ? v.free : 0;

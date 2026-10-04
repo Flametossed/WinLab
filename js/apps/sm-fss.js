@@ -10,6 +10,9 @@
  *   WS.sm.newShare({ volume, path, onCreate(w, data) })           New Share Wizard
  *   WS.sm.shareProperties(name, { onCreate(frame, api) })         "<share> Properties" -> Promise<bool: anything applied>
  *   WS.smfss.extendVolume(letter, { onCreate(frame) })            Extend Volume
+ *   WS.smfss.volumeProperties(id, { onCreate(frame, api) })       "<volume> Properties" (General, Health) -> Promise<bool: anything applied>
+ *   WS.smfss.manageAccessPaths(id, { onCreate(frame) })           Manage Drive Letter and Access Paths; frame.addPath(folder) stands in for Add...
+ *                                                                 (ids: 'vol:<disk>:<partition>' or 'part:<disk>:<partition>')
  *   WS.smfss.advancedSecurity({ name, path, access, onCreate })   Customize permissions... -> Promise<access[] | null>
  *   WS.smfss.bringOnline(n), takeOffline(n), initialize(n), resetDisk(n), stopSharing(name), scanVolume(letter)
  * Dialogs take opts.onCreate with the live wizard / frame / sheet; controls carry data-field names for tests. */
@@ -45,10 +48,13 @@
   /* ================================================================ rows */
   const isSysVol = v => v.letter === 'C' || ['System', 'Recovery'].includes(v.type);
   const formatted = v => !!v.fs && v.fs !== 'RAW';
-  const volName = v => (v.letter ? v.letter + ':' : v.path);
+  /** A volume is shown by its letter, else its first folder access path (C:\Mount\Data), else its \\?\Volume{GUID}\ path. */
+  const volName = v => (v.letter ? v.letter + ':' : v.paths && v.paths.length ? v.paths[0].replace(/\\$/, '') : v.path);
+  const volumeById = id => { const m = /^(?:vol|part):(\d+):(\d+)$/.exec(id || ''); return m ? S.volumeAt(+m[1], +m[2]) : null; };
   const partId = v => `part:${v.disk}:${v.partition}`;
-  /** Lettered volumes first (C:, E:...), then the ones known only by their \\?\Volume{GUID}\ path. */
-  const volSort = (x, y, a, b) => (a.v.letter ? '0' + a.v.letter : '1' + a.v.path).localeCompare(b.v.letter ? '0' + b.v.letter : '1' + b.v.path);
+  /** Lettered volumes first (C:, E:...), then folder-mounted ones, then the ones known only by their \\?\Volume{GUID}\ path. */
+  const volKey = v => (v.letter ? '0' + v.letter : v.paths.length ? '1' + v.paths[0] : '2' + v.path);
+  const volSort = (x, y, a, b) => volKey(a.v).localeCompare(volKey(b.v));
   const volumeRows = () => S.volumes().map(v => ({ id: `vol:${v.disk}:${v.partition}`, v, volume: volName(v), status: '', label: v.label || '', prov: 'Fixed',
     capacity: v.size, free: formatted(v) ? v.free : 0, pct: formatted(v) ? Math.round(v.used / v.size * 100) : 0 }));
   const diskRows = () => S.disks().map(d => ({ id: 'disk:' + d.number, d, number: d.number, vdisk: '', status: d.online ? 'Online' : 'Offline', capacity: d.size,
@@ -258,13 +264,13 @@
       { label: 'New iSCSI Virtual Disk...', disabled: !v.letter || !WS.features.isInstalled('FS-iSCSITarget-Server'), action: () => WS.apps.notImplemented('New iSCSI Virtual Disk Wizard') },
       { label: 'Scan File System for Errors', disabled: !formatted(v), action: () => scanVolume(v) },
       { label: 'Repair File System Errors', disabled: true },
-      { label: 'Manage Drive Letter and Access Paths...', disabled: sys, action: () => WS.diskmgmt.changeLetter(id) },
+      { label: 'Manage Drive Letter and Access Paths...', disabled: sys, action: () => manageAccessPaths(r.id) },
       { label: 'Format...', disabled: sys, action: () => WS.diskmgmt.format(id) },
       { label: 'Extend Volume...', disabled: !lim || !formatted(v) || ['System', 'Recovery'].includes(v.type) || lim.max - v.size < MB, action: () => extendVolume(v.letter) },
       { label: 'Delete Volume', disabled: sys, action: () => WS.diskmgmt.deleteVolume(id) },
       { label: 'Configure Data Deduplication...', disabled: sys || !WS.features.isInstalled('FS-Data-Deduplication'), action: () => WS.apps.notImplemented('Deduplication Settings') },
       SEP,
-      { label: 'Properties', disabled: !v.letter, action: () => WS.diskmgmt.volumeProperties(id) }
+      { label: 'Properties', disabled: !formatted(v), action: () => volumeProperties(r.id) }
     ];
   }
   function diskMenu(r) {
@@ -374,6 +380,125 @@
       } });
   }
 
+  /* ================================================================ volume Properties, Manage Drive Letter and Access Paths */
+  /** Server Manager's wording for a folder that can't hold a mount point. */
+  function accessPathError(r, folder) {
+    const f = String(folder || '').replace(/\\+$/, '');
+    return { PathNotFound: `The folder ${f} does not exist. Select an existing empty folder on an NTFS volume.`,
+      NotEmpty: `The folder ${f} is not empty. Select an empty folder on an NTFS volume.`,
+      NotNtfs: `The folder ${f} is not on an NTFS volume. Select an empty folder on an NTFS volume.`,
+      InUse: `Another volume is already mounted in ${f}.`, SameVolume: `The volume can't be mounted in a folder on the same volume.`,
+      InvalidPath: `The path ${f} is not valid. Type the full path of a folder, such as C:\\Data.` }[r.code] || r.error;
+  }
+  const hitOf = v => { const d = S.disk(v.disk); const p = d && d.partitions.find(x => x.number === v.partition); return p ? { disk: d, part: p } : null; };
+
+  /** "<volume> Properties": a left list (General, Health) with OK / Cancel / Apply, as Server Manager's share Properties. */
+  function volumeProperties(id, opts = {}) {
+    const v = volumeById(id);
+    if (!v) return Promise.resolve(false);
+    const title = `${volName(v)} Properties`;
+    const frame = WS.ui.modal({ title, width: 700, className: 'w32-dlg', closeValue: false });
+    const st = { label: v.label || '' };
+    let applied = false, cur = 'general';
+    const SECTIONS = [['general', 'General'], ['health', 'Health']];
+    const nav = h('div.nav'), pg = h('div.pg');
+    const okBtn = h('button.btn.primary', 'OK'), cancelBtn = h('button.btn', 'Cancel'), applyBtn = h('button.btn', { disabled: true }, 'Apply');
+    const sections = {
+      general: () => {
+        const x = S.volumeAt(v.disk, v.partition) || v;
+        const label = field('vol-label', F.text({ value: st.label, width: 260, maxLength: x.fs === 'FAT32' ? 11 : 32 }));
+        label.addEventListener('input', () => { st.label = label.value; applyBtn.disabled = false; });
+        const pct = x.size ? Math.round(x.used / x.size * 100) : 0;
+        const paths = [...(x.letter ? [x.letter + ':\\'] : []), ...x.paths];
+        return h('div',
+          kv([['Volume:', volName(x)], ['Server name:', server()]]),
+          F.row('Label:', label, { labelWidth: 194 }),
+          kv([['File system:', x.fs], ['Allocation unit size:', x.au >= 1024 ? x.au / 1024 + ' KB' : x.au + ' bytes'], ['Drive letter and access paths:', paths.join(', ') || 'None']]),
+          h('div.wz-section', 'CAPACITY'),
+          kv([['Capacity:', size(x.size)], ['Used space:', size(x.used)], ['Free space:', size(x.free)]]),
+          h('div.fss-usage', pctBar(pct), h('span', `${pct}% used`)));
+      },
+      health: () => h('div',
+        kv([['Health status:', 'Healthy'], ['Operational status:', 'OK'], ['Provisioning:', 'Fixed'], ['Volume type:', 'Simple']]),
+        h('p', { style: 'margin:12px 0 0 12px;color:#555' }, 'No file system errors were found on this volume. To check it again, close this dialog and click Scan File System for Errors.'))
+    };
+    function show(sec) {
+      cur = sec;
+      U.clear(nav); U.clear(pg);
+      for (const [k, label] of SECTIONS) nav.appendChild(h('div' + (k === sec ? '.sel' : ''), { dataset: { section: k }, onClick: () => show(k) }, label));
+      pg.append(h('h4', SECTIONS.find(x => x[0] === sec)[1]), sections[sec]());
+    }
+    function apply() {
+      const hit = hitOf(v);
+      if (!hit) { err('The volume no longer exists.', title); return false; }
+      const r = S.setLabel(hit, st.label);
+      if (!r.ok) { err(r, title); return false; }
+      applied = true; applyBtn.disabled = true;
+      return true;
+    }
+    okBtn.addEventListener('click', () => { if (applyBtn.disabled || apply()) frame.close(applied); });
+    cancelBtn.addEventListener('click', () => frame.close(applied));
+    applyBtn.addEventListener('click', () => { if (!applyBtn.disabled) apply(); });
+    frame.footer.append(okBtn, cancelBtn, applyBtn);
+    frame.onEscape = () => frame.close(applied);
+    frame.body.appendChild(h('div.w32.fss-props.fss-volprops', nav, pg));
+    show('general');
+    if (opts.onCreate) opts.onCreate(frame, { show, ok: () => okBtn.click(), apply: () => applyBtn.click(), cancel: () => cancelBtn.click(), state: st, current: () => cur });
+    return frame.promise;
+  }
+
+  /**
+   * Manage Drive Letter and Access Paths: the drive letter (a check box and a letter list) and the folders the volume is
+   * mounted in. Nothing changes until OK, which removes what was taken off, then adds the new folders and the letter.
+   */
+  function manageAccessPaths(id, opts = {}) {
+    const v = volumeById(id);
+    if (!v) return Promise.resolve(null);
+    const TITLE = 'Manage Drive Letter and Access Paths';
+    const st = { useLetter: !!v.letter, letter: v.letter || S.nextLetter(), paths: v.paths.slice() };
+    const letters = [...new Set([v.letter, ...S.freeLetters()].filter(Boolean))].sort();
+    const sel = field('letter', F.select(letters, st.letter, { width: 60, onChange: x => { st.letter = x; } }));
+    const chk = field('use-letter', F.checkbox('Drive letter:', st.useLetter, { onChange: on => { st.useLetter = on; sel.disabled = !on; } }));
+    sel.disabled = !st.useLetter;
+    const list = field('paths', h('select.inp.fss-paths', { size: 6 }));
+    const remove = field('remove', F.button('Remove', () => { const x = list.value; if (!x) return; st.paths = st.paths.filter(p => p !== x); paint(); }));
+    const paint = () => {
+      U.clear(list);
+      for (const p of st.paths) list.appendChild(h('option', { value: p }, p));
+      if (st.paths.length) list.value = st.paths[st.paths.length - 1];
+      remove.disabled = !st.paths.length;
+    };
+    const addPath = folder => {
+      const full = String(folder || '').trim().replace(/\\*$/, '\\');
+      if (full.length < 4) return;
+      if (!st.paths.some(x => x.toLowerCase() === full.toLowerCase())) st.paths.push(full);
+      paint();
+    };
+    const add = field('add', F.button('Add...', async () => {
+      const p = await WS.ui.filePicker({ mode: 'folder', title: 'Select Folder', prompt: 'Select an empty folder on an NTFS volume.', path: 'C:\\' });
+      if (p) addPath(p);
+    }));
+    paint();
+    const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+    return formDialog({ title: TITLE, width: 470,
+      onCreate: f => { Object.assign(f, { state: st, addPath, removePath: x => { st.paths = st.paths.filter(p => !same(p, x.replace(/\\*$/, '\\'))); paint(); } }); if (opts.onCreate) opts.onCreate(f); },
+      content: h('div.fss-access',
+        h('p', { style: 'margin-top:0' }, `Assign a drive letter or access paths to volume ${volName(v)} on ${server()}.`),
+        h('div.fss-letter', chk, sel),
+        h('div', { style: 'margin-top:12px' }, 'Access paths:'),
+        h('div.fss-pathrow', list, h('div.fss-pathbtns', add, remove))),
+      ok: () => {
+        const now = S.volumeAt(v.disk, v.partition);
+        if (!now) return 'The volume no longer exists.';
+        // remove first, so a path or letter can move to another slot
+        for (const p of now.paths) if (!st.paths.some(x => same(x, p))) { const r = S.removeAccessPath(v.disk, v.partition, p); if (!r.ok) return r; }
+        if (now.letter && (!st.useLetter || st.letter !== now.letter)) { const r = S.removeAccessPath(v.disk, v.partition, now.letter + ':\\'); if (!r.ok) return r; }
+        for (const p of st.paths) if (!now.paths.some(x => same(x, p))) { const r = S.addAccessPath(v.disk, v.partition, p); if (!r.ok) return accessPathError(r, p); }
+        if (st.useLetter && st.letter !== now.letter) { const r = S.assignLetter(v.disk, v.partition, st.letter); if (!r.ok) return r; }
+        return true;
+      } });
+  }
+
   /* ================================================================ New Volume Wizard */
   function newVolume(opts = {}) {
     const open = WS.wm.find('newvolume');
@@ -458,8 +583,15 @@
           return h('div.wz-text.fss-wz', h('p', 'Select whether to assign the volume to a drive letter or a folder. When you assign a volume to a folder, the volume appears as a folder within a drive, such as D:\\UserData.'),
             h('div', 'Assign to:'), line(rL, letter), line(rF, folder, browse), line(rN));
         },
-        validate: () => (d.assign === 'folder' ? 'Mounting a volume in an empty NTFS folder is not available in the lab simulator. Assign a drive letter instead.'
-          : d.assign === 'letter' && !d.letter ? 'Select a drive letter.' : null) },
+        validate: () => {
+          if (d.assign === 'letter') return d.letter ? null : 'Select a drive letter.';
+          if (d.assign !== 'folder') return null;
+          if (!d.folder.trim()) return 'Type the path of an empty folder on an NTFS volume, or click Browse.';
+          const c = S.checkAccessPath(d.folder);
+          if (!c.ok) return accessPathError(c, d.folder);
+          d.folder = c.path.replace(/\\$/, '');
+          return null;
+        } },
       { id: 'fs', nav: 'File System Settings', title: 'Select file system settings',
         render: () => {
           const fs = field('fs', F.select(['NTFS', 'ReFS'], d.fs, { width: 200 }));
@@ -490,7 +622,7 @@
           const x = disk();
           return h('div.wz-text.fss-wz', h('p', 'Confirm that the following are the correct settings, and then click Create.'),
             h('div.wz-section', 'VOLUME LOCATION'), kv([['Server:', server()], ['Subsystem:', 'Windows Storage'], ['Disk:', `Disk ${x.number} ${x.model || 'Msft Virtual Disk'}`], ['Free space:', size(avail(x))]]),
-            h('div.wz-section', 'VOLUME PROPERTIES'), kv([['Volume size:', size(d.bytes)], ['Drive letter or folder:', d.assign === 'letter' ? d.letter + ':\\' : 'None'], ['Volume label:', d.label]]),
+            h('div.wz-section', 'VOLUME PROPERTIES'), kv([['Volume size:', size(d.bytes)], ['Drive letter or folder:', d.assign === 'letter' ? d.letter + ':\\' : d.assign === 'folder' ? d.folder + '\\' : 'None'], ['Volume label:', d.label]]),
             h('div.wz-section', 'FILE SYSTEM SETTINGS'), kv([['File system:', d.fs], ['Short file name creation:', d.shortNames ? 'Enabled' : 'Disabled'], ['Allocation unit size:', d.au ? auLabel(d.au) : 'Default']]));
         } },
       { id: 'results', nav: 'Results', title: 'Completion', rerender: true,
@@ -506,6 +638,11 @@
         const r = S.newVolume(x.number, { size: d.bytes >= region.size ? 'max' : d.bytes, offset: region.offset, letter: d.assign === 'letter' ? d.letter : null,
           fs: d.fs, label: d.label, au: d.au, shortNames: d.shortNames });
         if (!r.ok) { d.error = r.error; d.steps = STEPS.map((s, i) => [s, i === 0 ? 'Completed' : i === 1 ? 'Failed' : '']); return null; }
+        if (d.assign === 'folder') {
+          const a = S.addAccessPath(r.volume.disk, r.volume.partition, d.folder);
+          if (!a.ok) { d.error = accessPathError(a, d.folder); d.steps = STEPS.map((s, i) => [s, i < 3 ? 'Completed' : i === 3 ? 'Failed' : '']); return null; }
+          r.volume = S.volumeAt(r.volume.disk, r.volume.partition);
+        }
         d.volume = r.volume;
         d.steps = STEPS.map(s => [s, 'Completed']);
         return null;
@@ -768,7 +905,7 @@
   const RENDER = { servers: serversPage, volumes: volumesPage, disks: disksPage, pools: poolsPage, shares: sharesPage, iscsi: iscsiPage, workfolders: workFoldersPage };
   function render(sub, c) { (RENDER[sub] || serversPage)(c); }
 
-  WS.smfss = { render, subnav, crumbs, PAGES, selection, size, extendVolume, advancedSecurity, bringOnline, takeOffline, initialize, resetDisk, stopSharing, scanVolume,
+  WS.smfss = { render, subnav, crumbs, PAGES, selection, size, extendVolume, volumeProperties, manageAccessPaths, advancedSecurity, bringOnline, takeOffline, initialize, resetDisk, stopSharing, scanVolume,
     menus: { volume: volumeMenu, disk: diskMenu, share: shareMenu }, rows: { volumes: volumeRows, disks: diskRows, shares: shareRows } };
   Object.assign(WS.sm, { newVolume, newShare, shareProperties });
 })();

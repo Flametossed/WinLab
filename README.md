@@ -44,6 +44,7 @@ Open **Lab Guide** on the desktop, pick a lab and press **Start lab**. The serve
 | 14: Processes and Task Manager | Intermediate |
 | 15: Hyper-V | Intermediate |
 | 16: Mapped drives with Group Policy Preferences | Intermediate |
+| 17: Drive letters and mount points | Intermediate |
 
 ## Getting started
 

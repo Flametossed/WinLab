@@ -1415,7 +1415,7 @@
       for (const { d, p } of parts) {
         const used = p.fs ? S.usedBytes(p) : 0;
         v.push({ key: `${d.number}:${p.number}`, disk: d.number, part: p.number, letter: p.letter, label: p.label || '', fs: p.fs || 'RAW', type: 'Partition', size: p.size, free: Math.max(0, p.size - used),
-          status: 'Healthy', info: p.letter === 'C' ? 'Boot' : p.type === 'System' ? 'System' : p.type === 'Recovery' ? 'Hidden' : '' });
+          status: 'Healthy', info: p.letter === 'C' ? 'Boot' : p.type === 'System' ? 'System' : p.type === 'Recovery' ? 'Hidden' : '', paths: (S.volumeAt(d.number, p.number) || {}).paths || [] });
       }
       return v.map((x, i) => ({ ...x, n: i }));
     }
@@ -1437,7 +1437,7 @@
     const diskTable = list => ['  Disk ###  Status         Size     Free     Dyn  Gpt', '  --------  -------------  -------  -------  ---  ---',
       ...list.map(d => `${d.number === sel.disk ? '*' : ' '} ${('Disk ' + d.number).padEnd(8)}  ${d.status.padEnd(13)}  ${dpSize(d.size).padStart(7)}  ${dpSize(d.style === 'RAW' ? d.size : d.unallocated).padStart(7)}  ${'   '}  ${d.style === 'GPT' ? ' * ' : ''}`.replace(/\s+$/, ''))].join('\n');
     const volTable = list => ['  Volume ###  Ltr  Label        Fs     Type        Size     Status     Info', '  ----------  ---  -----------  -----  ----------  -------  ---------  --------',
-      ...list.map(v => `${v.key === sel.vol ? '*' : ' '} ${('Volume ' + v.n).padEnd(10)}   ${v.letter || ' '}   ${v.label.slice(0, 11).padEnd(11)}  ${(v.fs || '').padEnd(5)}  ${v.type.padEnd(10)}  ${dpSize(v.size).padStart(7)}  ${v.status.padEnd(9)}  ${v.info}`.replace(/\s+$/, ''))].join('\n');
+      ...list.map(v => `${v.key === sel.vol ? '*' : ' '} ${('Volume ' + v.n).padEnd(10)}   ${v.letter || ' '}   ${v.label.slice(0, 11).padEnd(11)}  ${(v.fs || '').padEnd(5)}  ${v.type.padEnd(10)}  ${dpSize(v.size).padStart(7)}  ${v.status.padEnd(9)}  ${v.info}`.replace(/\s+$/, '') + (v.paths || []).map(x => '\n    ' + x).join(''))].join('\n');
     const word = (t, w) => !!t && w.startsWith(t) && t.length >= Math.min(3, w.length);
     const ptype = (d, p) => (p.type === 'Basic' ? 'Primary' : p.type);
 
@@ -1563,6 +1563,13 @@
         const t = target();
         const letter = args.letter ? args.letter.replace(':', '').toUpperCase() : null;
         let r;
+        if (args.mount != null) {
+          // assign/remove mount=<empty NTFS folder>: a folder access path
+          if (t.cd || !args.mount) return syntax(add ? 'ASSIGN' : 'REMOVE');
+          r = add ? S.addAccessPath(t.disk.number, t.part.number, args.mount) : S.removeAccessPath(t.disk.number, t.part.number, args.mount);
+          if (!r.ok) return fail(VDS + (r.code === 'NotEmpty' ? 'The directory is not empty.' : r.code === 'PathNotFound' ? 'The system cannot find the path specified.' : r.code === 'NotFound' ? 'The specified mount point is not valid.' : r.error));
+          return say(`DiskPart successfully ${add ? 'assigned' : 'removed'} the drive letter or mount point.`);
+        }
         if (t.cd) r = S.setCdromLetter(add ? letter || S.nextLetter() : null);
         else if (add) r = t.part.letter ? (letter ? S.setLetter(t.part.letter, letter) : { ok: false, error: 'The volume already has a drive letter.' }) : S.assignLetter(t.disk.number, t.part.number, letter || 'auto');
         else r = t.part.letter ? S.setLetter(t.part.letter, null) : { ok: false, error: 'The volume does not have a drive letter or mount point.' };
@@ -1672,6 +1679,72 @@
     }
     if (argv.some(a => /^[/-]\?$/.test(a))) { io.writeLine(`\nMicrosoft DiskPart version ${DP_VERSION}\n\nDISKPART [/add | /delete] <device type> <device name>\nDISKPART /s <script>\nDISKPART /?`); return 0; }
     return diskpartSession(io, null);
+  });
+
+  /* ================================================================ mountvol */
+  const MOUNTVOL_HELP = `Creates, deletes, or lists a volume mount point.
+
+MOUNTVOL [drive:]path VolumeName
+MOUNTVOL [drive:]path /D
+MOUNTVOL [drive:]path /L
+MOUNTVOL [drive:]path /P
+MOUNTVOL /R
+MOUNTVOL /N
+MOUNTVOL /E
+MOUNTVOL drive: /S
+
+    path        Specifies the existing NTFS directory where the mount
+                point will reside.
+    VolumeName  Specifies the volume name that is the target of the mount
+                point.
+    /D          Removes the volume mount point from the specified directory.
+    /L          Lists the mounted volume name for the specified directory.
+    /P          Removes the volume mount point from the specified directory,
+                dismounts the volume, and makes the volume not mountable.
+                You can make the volume mountable again by creating a volume
+                mount point.
+    /R          Removes volume mount point directories and registry settings
+                for volumes that are no longer in the system.
+    /N          Disables automatic mounting of new volumes.
+    /E          Re-enables automatic mounting of new volumes.
+    /S          Mount the EFI System Partition on the given drive.
+`;
+  defineNative('mountvol', (argv, io) => {
+    const S = WS.storage;
+    const vols = () => S.volumes().filter(v => v.type !== 'Reserved');
+    const flag = f => argv.some(a => a.toLowerCase() === f);
+    const fail = msg => { io.writeLine(msg); return 1; };
+    if (!argv.length || argv.some(a => a === '/?')) {
+      io.writeLine(MOUNTVOL_HELP + '\nPossible values for VolumeName along with current mount points are:\n');
+      const cd = S.cdrom();
+      const list = vols().map(v => [v.path, v.letter || v.paths.length ? [...(v.letter ? [v.letter + ':\\'] : []), ...v.paths] : null]);
+      if (cd) list.push([`\\\\?\\Volume{${U.hashStr('cdrom').toString(16).padStart(8, '0')}-0000-0000-0000-000000000000}\\`, cd.letter ? [cd.letter + ':\\'] : null]);
+      for (const [path, mounts] of list) io.writeLine(`    ${path}\n${mounts ? mounts.map(m => '        ' + m).join('\n') : '        *** NO MOUNT POINTS ***'}\n`);
+      return 0;
+    }
+    if (flag('/r') || flag('/n') || flag('/e')) return 0;
+    const rest = argv.filter(a => !/^\/[a-z]$/i.test(a));
+    if (!rest.length) return fail('The parameter is incorrect.\n');
+    let dir;
+    try { dir = WS.fs.full(rest[0].replace(/\\+$/, ''), io.cwd); } catch (e) { return fail('The system cannot find the path specified.\n'); }
+    if (flag('/d') || flag('/p')) {
+      const v = S.volumeByPath(dir);
+      if (!v) return fail('The file or directory is not a reparse point.\n');
+      const r = S.removeAccessPath(v.disk, v.partition, dir);
+      return r.ok ? 0 : fail(r.error + '\n');
+    }
+    if (flag('/l')) {
+      const v = S.volumeByPath(dir);
+      if (!v) return fail('The file or directory is not a reparse point.\n');
+      io.writeLine('    ' + v.path);
+      return 0;
+    }
+    if (rest.length < 2) return fail('The parameter is incorrect.\n');
+    const target = vols().find(v => v.path.toLowerCase() === rest[1].toLowerCase());
+    if (!target) return fail('The parameter is incorrect.\n');
+    const r = S.addAccessPath(target.disk, target.partition, dir);
+    if (r.ok) return 0;
+    return fail((r.code === 'PathNotFound' ? 'The system cannot find the file specified.' : r.code === 'InUse' ? 'The volume mount point already exists.' : r.error) + '\n');
   });
 
   /* ================================================================ launchers */

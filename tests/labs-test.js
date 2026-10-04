@@ -38,7 +38,7 @@
   try {
     await wait(250);
     if (new URLSearchParams(location.search).get('shot') === 'guide') { WS.apps.launch('lab'); await wait(200); console.log('RESULT 0 passed, 0 failed'); return; }
-    t('built-in labs are registered', ['lab01-initial-config', 'lab02-adds-forest', 'lab03-ad-objects', 'lab04-dns', 'lab05-dhcp', 'lab06-storage-shares', 'lab07-iis', 'lab09-services-events', 'lab11-firewall', 'lab12-file-server', 'lab13-group-policy', 'lab14-task-manager', 'lab15-hyperv', 'lab16-drive-maps'].every(id => L.get(id)));
+    t('built-in labs are registered', ['lab01-initial-config', 'lab02-adds-forest', 'lab03-ad-objects', 'lab04-dns', 'lab05-dhcp', 'lab06-storage-shares', 'lab07-iis', 'lab09-services-events', 'lab11-firewall', 'lab12-file-server', 'lab13-group-policy', 'lab14-task-manager', 'lab15-hyperv', 'lab16-drive-maps', 'lab17-mount-points'].every(id => L.get(id)));
     t('new check helpers are available', ['dnsForwarders', 'conditionalForwarder', 'dhcpFilter', 'dhcpLease', 'eventLog', 'customView', 'gpo', 'gpLink', 'gpoSetting', 'gpInheritance', 'gpoPermission', 'domainPasswordPolicy', 'gpoBackup', 'gpApplied', 'wmiFilter', 'iisSite', 'iisAppPool', 'iisDefaultDoc', 'http', 'vmSwitch', 'vm', 'vhd'].every(h => L.helpers().includes(h)));
 
     // Lab 01: the network objectives (the rename/workgroup/restart ones are covered by the Server Manager suite).
@@ -302,6 +302,18 @@
     await ps(['Checkpoint-VM -Name SRV01 -SnapshotName "Clean install"', 'Set-VM SRV01 -AutomaticStartAction Start -AutomaticStopAction ShutDown']);
     finished('Lab 15');
     WS.hv.timeScale = 1;
+
+    await begin('lab17-mount-points');
+    t('Lab 17 starts with nothing done (Logs at L: and C:\\Temp\\LogsOld, an unreachable volume, Disk 1 offline)', open().join() === 'archive,logs,stale,scratch' && WS.storage.volume('L').paths.join() === 'C:\\Temp\\LogsOld\\'
+      && WS.storage.volumes().some(v => v.label === 'New Volume' && !v.letter && !v.paths.length) && !WS.storage.disk(1).online, open());
+    await ps(['Set-Disk 1 -IsOffline $false', 'Initialize-Disk 1 -PartitionStyle GPT', 'New-Partition -DiskNumber 1 -UseMaximumSize | Format-Volume -FileSystem NTFS -NewFileSystemLabel FinanceArchive', 'Add-PartitionAccessPath -DiskNumber 1 -PartitionNumber 2 -AccessPath C:\\Shares\\Finance\\Archive']);
+    t('Lab 17 archive objective completes', !open().includes('archive'), open());
+    await ps(['New-Item C:\\Logs -ItemType Directory', 'Add-PartitionAccessPath -DriveLetter L -AccessPath C:\\Logs']);
+    t('Lab 17 logs objective completes', !open().includes('logs'), open());
+    await ps(['Remove-PartitionAccessPath -DriveLetter L -AccessPath C:\\Temp\\LogsOld']);
+    t('Lab 17 stale path objective completes', !open().includes('stale'), open());
+    await ps(['Set-Partition -DiskNumber 2 -PartitionNumber 3 -NewDriveLetter S', 'Set-Volume -DriveLetter S -NewFileSystemLabel Scratch']);
+    finished('Lab 17');
 
     // Undo: step snapshots and going back to one (Lab 16, through the model).
     await begin('lab16-drive-maps');

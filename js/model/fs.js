@@ -9,7 +9,9 @@
  *            Paths may be UNC (\\server\share\dir) or start with a mapped letter; both resolve to this server's
  *            shares (other hosts fail with 'NetPath' / 'NetName', as SMB does).
  * State: fs.drives[<LETTER>] = dir node; smb.shares[]; netuse.drives[] (see WS.netuse below).
- * Node: { type: 'dir'|'file', name, children: {lowercase name: node}, content?, size?, attrs?: 'HSR', created, modified, protect? } */
+ * Node: { type: 'dir'|'file', name, children: {lowercase name: node}, content?, size?, attrs?: 'HSR', created, modified, protect?, mount? }
+ *   mount: a volume mount point (a folder another volume is mounted in): the id of that volume's partition. Paths step
+ *   through it into the volume's own tree (WS.storage.mountTarget), and info() reports it as `junction`. */
 (function () {
   'use strict';
   const WS = window.WS;
@@ -185,7 +187,8 @@ loopback                 127
     if (p.drive.length > 1 && node) { const sh = uncParts(p.drive); const real = WS.smb.get(sh.share); if (real) p.drive = `\\\\${sh.server}\\${real.name}`; }
     for (const seg of p.parts) {
       const c = node && node.type === 'dir' ? node.children[seg.toLowerCase()] : null;
-      out.push(c ? c.name : seg); node = c;
+      out.push(c ? c.name : seg);
+      try { node = enter(c, p); } catch (e) { node = null; }
     }
     return fmt({ drive: p.drive, parts: out });
   }
@@ -201,16 +204,26 @@ loopback                 127
     }
     return r;
   }
+  /** A mount point leads into the mounted volume's root; a mount whose volume is gone is an ordinary empty folder. */
+  function enter(node, p) {
+    if (!node || !node.mount || !WS.storage || !WS.storage.mountTarget) return node;
+    const t = WS.storage.mountTarget(node.mount);
+    if (t === 'offline') throw new FsError('NotReady', 'The device is not ready.', fmt(p));
+    if (t === 'raw') throw new FsError('NotReady', 'The volume does not contain a recognized file system.\nPlease make sure that all required file system drivers are loaded and that the volume is not corrupted.', fmt(p));
+    return t || node;
+  }
+  /** -> { p, node, parent, entry, missingParent? }; entry is the mount point itself when the path names one (node is then the mounted root). */
   function walk(path, cwd) {
     const p = parse(path, cwd);
-    let node = root(p.drive), parent = null;
+    let node = root(p.drive), parent = null, entry = null;
     for (let i = 0; i < p.parts.length; i++) {
       if (node.type !== 'dir') return { p, node: null, parent: null, missingParent: true };
       parent = node;
-      node = node.children[p.parts[i].toLowerCase()];
-      if (!node) return { p, node: null, parent: i === p.parts.length - 1 ? parent : null, missingParent: i < p.parts.length - 1 };
+      entry = node.children[p.parts[i].toLowerCase()];
+      if (!entry) return { p, node: null, parent: i === p.parts.length - 1 ? parent : null, missingParent: i < p.parts.length - 1 };
+      node = enter(entry, { drive: p.drive, parts: p.parts.slice(0, i + 1) });
     }
-    return { p, node, parent };
+    return { p, node, parent, entry: entry && entry.mount && node !== entry ? entry : null };
   }
   const INVALID = /[<>:"/\\|?*\x00-\x1f]/;
   const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
@@ -230,11 +243,12 @@ loopback                 127
     const created = node.created || WS.state.system.installDate;
     return { type: node.type, name: node.name || path, path, size: node.type === 'file' ? sizeOf(node) : 0, created, modified: node.modified || created,
       attrs: node.attrs || '', hidden: /H/.test(node.attrs || ''), system: /S/.test(node.attrs || ''), readOnly: /R/.test(node.attrs || ''),
-      extension: node.type === 'file' && node.name.includes('.') ? node.name.slice(node.name.lastIndexOf('.')) : '' };
+      extension: node.type === 'file' && node.name.includes('.') ? node.name.slice(node.name.lastIndexOf('.')) : '',
+      junction: node.mount && WS.storage && WS.storage.mountTargetPath ? WS.storage.mountTargetPath(node.mount) : null };
   }
 
   function stat(path, cwd) {
-    try { const w = walk(path, cwd); return w.node ? info(w.node, full(path, cwd)) : null; }
+    try { const w = walk(path, cwd); return w.node ? info(w.entry || w.node, full(path, cwd)) : null; }
     catch (e) { if (e instanceof FsError) return null; throw e; }
   }
   function list(path, cwd, opts = {}) {
@@ -260,7 +274,7 @@ loopback                 127
         next = node.children[seg.toLowerCase()] = { type: 'dir', name: seg, children: {}, created: new Date().toISOString() };
         touch(node); created = true;
       } else if (next.type !== 'dir') throw new FsError('Exists', `An item with the specified name ${fmt({ drive: p.drive, parts: p.parts.slice(0, i + 1) })} already exists.`, fmt(p));
-      node = next;
+      node = enter(next, { drive: p.drive, parts: p.parts.slice(0, i + 1) });
     }
     if (!created && !opts.existOk) throw new FsError('Exists', `An item with the specified name ${full(path, cwd)} already exists.`, fmt(p));
     changed();
@@ -297,10 +311,11 @@ loopback                 127
     const w = walk(path, cwd);
     if (!w.node) throw notFound(w.p, true);
     if (!w.p.parts.length || isProtected(w.p) || /S/.test(w.node.attrs || '')) throw new FsError('AccessDenied', `Access to the path '${fmt(w.p)}' is denied.`, fmt(w.p));
-    if (w.node.type === 'dir' && Object.keys(w.node.children).length && !opts.recursive) throw new FsError('NotEmpty', `The directory is not empty.`, fmt(w.p));
+    if (!w.entry && w.node.type === 'dir' && Object.keys(w.node.children).length && !opts.recursive) throw new FsError('NotEmpty', `The directory is not empty.`, fmt(w.p));
     delete w.parent.children[w.p.parts[w.p.parts.length - 1].toLowerCase()];
     touch(w.parent);
     changed();
+    if (w.entry) WS.store.changed('storage'); // removing a mount point removes that access path
   }
 
   /* ---------------- Recycle Bin (Explorer's Delete; Remove-Item and del still delete permanently, as on Windows) ---------------- */
@@ -308,6 +323,7 @@ loopback                 127
   function recycle(path, cwd) {
     const w = walk(path, cwd);
     if (!w.node) throw notFound(w.p, true);
+    if (w.entry) { remove(path, cwd); return null; }
     if (!w.p.parts.length || isProtected(w.p) || /S/.test(w.node.attrs || '')) throw new FsError('AccessDenied', `Access to the path '${fmt(w.p)}' is denied.`, fmt(w.p));
     const origin = fmt({ drive: w.p.drive, parts: w.p.parts.slice(0, -1) });
     const item = { id: U.guid(), name: w.node.name, origin, type: w.node.type, size: sizeOf(w.node), deleted: new Date().toISOString(), node: w.node };
@@ -342,9 +358,10 @@ loopback                 127
     checkName(newName);
     const key = w.p.parts[w.p.parts.length - 1].toLowerCase();
     if (newName.toLowerCase() !== key && w.parent.children[newName.toLowerCase()]) throw new FsError('Exists', `Cannot create a file when that file already exists.`, newName);
+    const item = w.entry || w.node;
     delete w.parent.children[key];
-    w.node.name = newName;
-    w.parent.children[newName.toLowerCase()] = w.node;
+    item.name = newName;
+    w.parent.children[newName.toLowerCase()] = item;
     touch(w.parent);
     changed();
   }
@@ -352,7 +369,7 @@ loopback                 127
   function transfer(src, dst, cwd, move, opts = {}) {
     const s = walk(src, cwd);
     if (!s.node) throw notFound(s.p, true);
-    if (move && (isProtected(s.p) || !s.p.parts.length)) throw new FsError('AccessDenied', `Access to the path '${fmt(s.p)}' is denied.`, fmt(s.p));
+    if (move && (isProtected(s.p) || !s.p.parts.length || s.entry)) throw new FsError('AccessDenied', `Access to the path '${fmt(s.p)}' is denied.`, fmt(s.p));
     if (s.node.type === 'dir' && !move && !opts.recursive && Object.keys(s.node.children).length) opts.shallow = true;
     let d = walk(dst, cwd);
     let parent, name;
@@ -367,6 +384,7 @@ loopback                 127
     if (existing && !opts.force) throw new FsError('Exists', `An item with the specified name ${fmt(d.p)}${d.node && d.node.type === 'dir' ? '\\' + name : ''} already exists.`, name);
     const clone = U.deepClone(s.node);
     clone.name = name;
+    delete clone.mount; delete clone.attrs;
     if (opts.shallow) clone.children = {};
     if (!move) { clone.created = new Date().toISOString(); }
     parent.children[name.toLowerCase()] = clone;
@@ -382,8 +400,9 @@ loopback                 127
   }
 
   /** Called by WS.storage when a volume is formatted or gets a letter. */
+  const newRoot = () => D('', D('System Volume Information', 'HS'), D('$RECYCLE.BIN', 'HS'));
   function createDrive(letter) {
-    WS.state.fs.drives[letter] = D('', D('System Volume Information', 'HS'), D('$RECYCLE.BIN', 'HS'));
+    WS.state.fs.drives[letter] = newRoot();
     changed();
   }
   function moveDrive(from, to) { const d = WS.state.fs.drives; d[to] = d[from]; delete d[from]; changed(); }
@@ -396,7 +415,22 @@ loopback                 127
     drives: () => Object.keys(WS.state.fs.drives).sort(),
     /** A local volume or a mapped network drive (cd, Set-Location, Explorer). */
     hasDrive: l => !!WS.state.fs.drives[String(l).toUpperCase()] || !!mappedDrive(String(l).toUpperCase()),
-    createDrive, moveDrive, removeDrive,
+    createDrive, moveDrive, removeDrive, newRoot, nodeSize: sizeOf,
+    /** The folder node at a path, not following a mount point there (WS.storage mounts volumes on it). -> node | null */
+    folderNode: (path, cwd) => { try { const w = walk(path, cwd); return w.entry || (w.node && w.node.type === 'dir' ? w.node : null); } catch (e) { return null; } },
+    /** Which volume holds a path: { letter } or { mount: partition id } for a path inside a mounted volume. */
+    volumeOf(path, cwd) {
+      const p = parse(path, cwd);
+      if (p.drive.length > 1) return null;
+      let node = root(p.drive), at = { letter: p.drive };
+      for (const seg of p.parts) {
+        const c = node && node.type === 'dir' ? node.children[seg.toLowerCase()] : null;
+        if (!c) break;
+        if (c.mount) at = { mount: c.mount };
+        node = enter(c, p);
+      }
+      return at;
+    },
     recycle, restore, emptyRecycle, recycleBin: () => bin().map(({ node, ...x }) => x),
     /** Used by models (IIS, AD DS) to lay down folders/files without caring whether they exist. */
     ensureDir: path => mkdir(path, null, { existOk: true }),

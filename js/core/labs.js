@@ -308,11 +308,14 @@
     if (a.contains != null) { try { return WS.fs.readFile(a.path).toLowerCase().includes(String(a.contains).toLowerCase()); } catch (e) { return false; } }
     return true;
   });
+  // path: the volume mounted in that folder (C:\Mount\Data); hasLetter: false means it has no drive letter as well
   helper('volume', a => {
-    const v = WS.storage.volume(a.letter);
+    const v = a.path ? WS.storage.volumeByPath(a.path) : WS.storage.volume(a.letter);
     if (!v) return false;
+    if (a.path && a.letter !== undefined && v.letter !== (a.letter ? String(a.letter).toUpperCase() : null)) return false;
+    if (a.hasLetter != null && !!v.letter !== !!a.hasLetter) return false;
     if (a.minSizeGB && v.size < a.minSizeGB * WS.storage.GB * 0.99) return false;
-    return fieldsMatch(v, a, ['letter', 'minSizeGB']);
+    return fieldsMatch(v, a, ['letter', 'minSizeGB', 'path', 'hasLetter']);
   });
   helper('disk', a => { const d = WS.storage.disks().find(x => x.number === +a.number); return !!d && fieldsMatch(d, a, ['number']); });
   helper('firewallRule', a => {

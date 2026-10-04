@@ -207,6 +207,7 @@
       }
       const st = WS.fs.stat(path);
       if (!st) return Promise.resolve(false);
+      if (st.junction) return mountProps(path, st);
       const dir = st.type === 'dir';
       let files = 0, folders = 0;
       if (dir) { const walk = p => { for (const x of WS.fs.list(p)) { if (x.type === 'dir') { folders++; walk(join(p, x.name)); } else files++; } }; try { walk(path); } catch (e) { /* unreadable */ } }
@@ -221,6 +222,18 @@
         F.row('Attributes:', h('span.ex-attrs', F.checkbox('Read-only', st.readOnly, { disabled: true }), F.checkbox('Hidden', st.hidden, { disabled: true })), lw)) }];
       if (dir) tabs.push({ label: 'Sharing', render: () => WS.diskmgmt.sharingTab(path) });
       return WS.ui.propertySheet({ title: `${st.name} Properties`, width: 400, tabs });
+    }
+    /** A mount point's Properties: Type Mounted Volume, and the volume it leads to (its Properties button opens the volume's). */
+    function mountProps(path, st) {
+      const v = WS.storage.volumeByPath(path);
+      const lw = { labelWidth: 100 };
+      const target = v ? `${v.label || 'Local Disk'}${v.letter ? ` (${v.letter}:)` : ''}` : st.junction;
+      return WS.ui.propertySheet({ title: `${st.name} Properties`, width: 400, tabs: [{ label: 'General', render: () => h('div',
+        h('div.ex-phead', h('span.ex-pic', { html: I.drive }), F.text({ value: st.name, readOnly: true })), F.sep(),
+        F.row('Type:', F.value('Mounted Volume'), lw), F.row('Location:', F.value(path.replace(/\\[^\\]+$/, '').replace(/^([A-Z]:)$/i, '$1\\')), lw),
+        F.row('Target:', h('span', { style: 'display:flex;align-items:center;gap:10px' }, F.value(target),
+          F.button('Properties', () => WS.diskmgmt.volumeProperties(`part:${v.disk}:${v.partition}`), { disabled: !v })), lw), F.sep(),
+        F.row('Created:', F.value(U.fmtDateTime(st.created)), lw)) }] });
     }
     const driveProps = l => { const hit = WS.storage.byLetter(l); return hit ? WS.diskmgmt.volumeProperties(`part:${hit.disk.number}:${hit.part.number}`) : null; };
     const itemMenu = rows => {
@@ -284,13 +297,13 @@
         }))] : [])));
       } else {
         const inBin = cur === BIN;
-        const typeOf = r => (r.type === 'dir' ? 'File folder' : WS.ui.fileTypeName(r.name, false));
+        const typeOf = r => (r.junction ? 'Mounted Volume' : r.type === 'dir' ? 'File folder' : WS.ui.fileTypeName(r.name, false));
         list = WS.ui.listView({
           columns: inBin ? [{ key: 'name', label: 'Name', width: 240 }, { key: 'origin', label: 'Original Location', width: 220 }, { key: 'deleted', label: 'Date Deleted', width: 150, type: 'date', render: r => U.fmtDateTime(r.deleted) },
             { key: 'size', label: 'Size', width: 80, align: 'right', type: 'num', render: r => kb(r.size) }, { key: 'kind', label: 'Item type', width: 130, value: typeOf }]
             : [{ key: 'name', label: 'Name', width: 280, sort: (a, b, ra, rb) => (ra.type === rb.type ? a.localeCompare(b) : ra.type === 'dir' ? -1 : 1) }, { key: 'modified', label: 'Date modified', width: 150, type: 'date', render: r => U.fmtDateTime(r.modified) },
               { key: 'kind', label: 'Type', width: 150, value: typeOf }, { key: 'size', label: 'Size', width: 90, align: 'right', type: 'num', render: r => (r.type === 'dir' ? '' : kb(r.size)) }],
-          rows: items, getId: r => (inBin ? r.id : r.name), icon: r => (r.type === 'dir' ? I.folder : I.file), multi: true, sortKey: inBin ? 'deleted' : 'name', sortDir: inBin ? -1 : 1,
+          rows: items, getId: r => (inBin ? r.id : r.name), icon: r => (r.junction ? I.drive : r.type === 'dir' ? I.folder : I.file), multi: true, sortKey: inBin ? 'deleted' : 'name', sortDir: inBin ? -1 : 1,
           emptyText: filter ? 'No items match your search.' : inBin ? 'The Recycle Bin is empty.' : 'This folder is empty.',
           rowClass: r => (!inBin && clip && clip.cut && clip.paths.includes(join(cur, r.name)) ? 'ex-cut' : ''),
           onSelect: () => paintCmd(), onActivate: r => (inBin ? restore([r.id]) : go(join(cur, r.name))),

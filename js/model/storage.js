@@ -3,7 +3,9 @@
  * Disk 1 is a blank 40 GB data disk that starts Offline (SAN policy), so students bring it online,
  * initialize it and create a volume - exactly as on a fresh Hyper-V VM with a second VHDX.
  * State: storage.disks[] = { number, model, size, style: 'RAW'|'GPT'|'MBR', online, readOnly, boot, partitions[] },
- *        partition = { number, type: 'System'|'Reserved'|'Basic'|'Recovery', offset, size, fs, letter, label, flags[], au?, compressed?, shortNames? },
+ *        partition = { number, type: 'System'|'Reserved'|'Basic'|'Recovery', offset, size, fs, letter, label, flags[], au?, compressed?, shortNames?, id? },
+ *        id: a stable id, given when the volume is first mounted in a folder; the mount point folder (a WS.fs node with
+ *        .mount = id) is the only record of a folder access path, so renaming or removing the folder changes the paths. 
  *        storage.cdrom = { letter, media }. Sizes are bytes.
  * Every lettered, formatted volume gets its administrative share (E$, "Default share") in WS.smb, as the Server service does. */
 (function () {
@@ -105,7 +107,7 @@
   function clearDisk(n) {
     const d = disk(n); if (!d) return noDisk(n);
     if (d.boot) return { ok: false, error: 'The operation is not allowed on the system or boot disk.' };
-    for (const p of d.partitions) if (p.letter) WS.fs.removeDrive(p.letter);
+    for (const p of d.partitions) { if (p.letter) WS.fs.removeDrive(p.letter); dropMounts(p); }
     d.partitions = []; d.style = 'RAW';
     changed();
     return { ok: true };
@@ -180,6 +182,7 @@
     if (!p) return { ok: false, code: 'NotFound', error: `No MSFT_Partition objects found with property 'PartitionNumber' equal to '${pn}'.` };
     if (isSystem(p)) return { ok: false, error: 'Virtual Disk Service error:\nCannot delete a protected partition without the force protected parameter set.' };
     if (p.letter) WS.fs.removeDrive(p.letter);
+    dropMounts(p);
     d.partitions = d.partitions.filter(x => x !== p);
     changed();
     return { ok: true };
@@ -207,6 +210,89 @@
     changed();
     return { ok: true };
   }
+  /* ---------------- folder access paths (mount points) ---------------- */
+  const partById = id => { for (const d of S().disks) for (const p of d.partitions) if (p.id === id) return { disk: d, part: p }; return null; };
+  const stablePart = p => p.id || (p.id = WS.util.guid());
+  /** The files on a volume: its drive while it has a letter, otherwise the tree kept on the partition. */
+  function volumeTree(p) {
+    if (!p.fs) return null;
+    if (p.letter && WS.state.fs.drives[p.letter]) return WS.state.fs.drives[p.letter];
+    return p.files || (p.files = WS.fs.newRoot());
+  }
+  /** fs.js steps through a mount point with this: the volume's root, 'offline', 'raw', or null when the volume is gone. */
+  function mountTarget(id) {
+    const hit = partById(id);
+    if (!hit) return null;
+    if (!hit.disk.online) return 'offline';
+    return hit.part.fs ? volumeTree(hit.part) : 'raw';
+  }
+  /** Every mount point on the lettered drives: { partition id: ['C:\\Mount\\Data\\', ...] }. Mounts nested inside a folder-only volume are not listed. */
+  function mountIndex() {
+    const out = {};
+    const walk = (node, path) => {
+      for (const c of Object.values(node.children || {})) {
+        if (c.type !== 'dir') continue;
+        const at = path + c.name + '\\';
+        if (c.mount) (out[c.mount] = out[c.mount] || []).push(at); else walk(c, at);
+      }
+    };
+    for (const [l, r] of Object.entries(WS.state.fs.drives).sort()) walk(r, l + ':\\');
+    return out;
+  }
+  const folderPaths = (p, idx = mountIndex()) => ((p.id && idx[p.id]) || []).slice().sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  function dropMounts(p) {
+    if (!p.id) return;
+    for (const path of folderPaths(p)) { const n = WS.fs.folderNode(path); if (n) delete n.mount; }
+    WS.store.changed('fs');
+  }
+  const notFoundPart = pn => ({ ok: false, code: 'NotFound', error: `No MSFT_Partition objects found with property 'PartitionNumber' equal to '${pn}'.` });
+  const isLetterPath = path => /^[A-Za-z]:?\\?$/.test(String(path).trim());
+  /**
+   * addAccessPath(n, pn, folder): mount the volume in an empty folder on an NTFS volume (Add-PartitionAccessPath -AccessPath,
+   * mountvol, diskpart "assign mount=", "Mount in the following empty NTFS folder"). A drive-letter path assigns that letter.
+   */
+  function addAccessPath(n, pn, folder) {
+    const p = findPart(n, pn);
+    if (!p) return notFoundPart(pn);
+    if (isLetterPath(folder)) return p.letter ? { ok: false, code: 'HasLetter', error: 'The volume already has a drive letter.' } : assignLetter(n, pn, String(folder).trim()[0]);
+    if (['System', 'Reserved', 'Recovery'].includes(p.type)) return { ok: false, error: 'The operation is not supported on this partition.' };
+    const c = checkAccessPath(folder, p);
+    if (!c.ok) return c;
+    c.node.mount = stablePart(p);
+    WS.store.changed('fs');
+    changed();
+    return { ok: true, path: c.path };
+  }
+  /** Can a volume (partition p, or a new one) be mounted in this folder? -> { ok, path: 'C:\\Data\\', node } | { ok: false, code, error } */
+  function checkAccessPath(folder, p) {
+    const raw = String(folder || '').trim();
+    if (!/^[A-Za-z]:\\./.test(raw)) return { ok: false, code: 'InvalidPath', error: 'The access path is not valid.' };
+    let full, node, host;
+    try { full = WS.fs.full(raw.replace(/\\+$/, '')); node = WS.fs.folderNode(full); host = node && WS.fs.volumeOf(full + '\\..'); } catch (e) { node = null; }
+    if (!node) return { ok: false, code: 'PathNotFound', error: 'The system cannot find the path specified.' };
+    if (node.mount) return { ok: false, code: 'InUse', error: 'The requested access path is already in use.' };
+    const hostPart = host && (host.mount ? (partById(host.mount) || {}).part : (byLetter(host.letter) || {}).part);
+    if (!hostPart || hostPart.fs !== 'NTFS') return { ok: false, code: 'NotNtfs', error: 'The specified path is not on an NTFS volume. Volumes can be mounted only in an empty folder on an NTFS volume.' };
+    if (p && hostPart === p) return { ok: false, code: 'SameVolume', error: 'A volume cannot be mounted in a folder on itself.' };
+    if (Object.keys(node.children).length) return { ok: false, code: 'NotEmpty', error: 'The directory is not empty.' };
+    return { ok: true, path: full + '\\', node };
+  }
+  /** removeAccessPath(n, pn, path): a folder path removes that mount point (the folder stays, empty); a letter path removes the letter. */
+  function removeAccessPath(n, pn, path) {
+    const p = findPart(n, pn);
+    if (!p) return notFoundPart(pn);
+    if (isLetterPath(path)) {
+      const l = String(path).trim()[0].toUpperCase();
+      return p.letter === l ? setLetter(l, null) : { ok: false, code: 'NotFound', error: 'The access path is not valid.' };
+    }
+    const node = WS.fs.folderNode(String(path).trim().replace(/\\+$/, ''));
+    if (!node || !p.id || node.mount !== p.id) return { ok: false, code: 'NotFound', error: 'The access path is not valid.' };
+    delete node.mount;
+    WS.store.changed('fs');
+    changed();
+    return { ok: true };
+  }
+
   /** Convert to GPT/MBR Disk: only an empty disk (an MSR alone counts as empty) can change partition style. */
   function convertStyle(n, style) {
     const d = disk(n); if (!d) return noDisk(n);
@@ -240,8 +326,9 @@
     changed();
     return { ok: true };
   }
+  /** setLabel(letter | { disk, part }, label): a volume without a letter is named by its partition. */
   function setLabel(letter, label) {
-    const hit = byLetter(letter);
+    const hit = letter && typeof letter === 'object' ? letter : byLetter(letter);
     if (!hit) return { ok: false, code: 'NotFound', error: `No MSFT_Volume objects found with property 'DriveLetter' equal to '${letter}'.` };
     if (String(label).length > 32) return { ok: false, error: 'The volume label is not valid. Please enter a valid volume label.' };
     hit.part.label = String(label); changed(); return { ok: true };
@@ -272,16 +359,29 @@
   function usedBytes(p) {
     if (!p.fs) return 0;
     const meta = p.fs === 'ReFS' ? Math.min(2 * GB, p.size * 0.02) : p.size * 0.002;
-    const files = p.letter && WS.state.fs.drives[p.letter] ? WS.fs.du(p.letter + ':\\') : 0;
+    const tree = p.letter ? WS.state.fs.drives[p.letter] || p.files : p.files;
+    const files = tree ? WS.fs.nodeSize(tree) : 0;
     return Math.round((p.letter === 'C' ? OS_USED : 0) + meta + files);
   }
-  function volumeOf(d, p) {
+  function volumeOf(d, p, idx) {
     const used = usedBytes(p);
+    const paths = folderPaths(p, idx);
     const status = 'Healthy (' + (p.flags.join(', ') || 'Primary Partition') + ')';
     return { disk: d.number, partition: p.number, letter: p.letter, label: p.label, fs: p.fs || (p.type === 'Basic' ? 'RAW' : ''), type: p.type,
-      path: `\\\\?\\Volume{${WS.util.hashStr('vol' + d.number + p.number).toString(16).padStart(8, '0')}-0000-0000-0000-100000000000}\\`,
+      path: volumeGuidPath(d, p),
       layout: 'Simple', volType: 'Basic', status, size: p.size, used, free: Math.max(0, p.size - used),
-      healthStatus: 'Healthy', operationalStatus: 'OK', hidden: p.type === 'Reserved', au: p.au || (p.fs ? defaultAu(p.fs, p.size) : 0), compressed: !!p.compressed, shortNames: !!p.shortNames };
+      healthStatus: 'Healthy', operationalStatus: 'OK', hidden: p.type === 'Reserved', au: p.au || (p.fs ? defaultAu(p.fs, p.size) : 0), compressed: !!p.compressed, shortNames: !!p.shortNames,
+      paths, accessPaths: [...(p.letter ? [p.letter + ':\\'] : []), ...paths, volumeGuidPath(d, p)] };
+  }
+  const volumeGuidPath = (d, p) => `\\\\?\\Volume{${WS.util.hashStr('vol' + d.number + p.number).toString(16).padStart(8, '0')}-0000-0000-0000-100000000000}\\`;
+  /** The \\?\Volume{GUID}\ path a mount point leads to (dir shows it as the junction target). */
+  function mountTargetPath(id) { const hit = partById(id); return hit ? volumeGuidPath(hit.disk, hit.part) : null; }
+  /** volumeAt(disk, partition); volumeByPath('C:\\Mount\\Data') finds a volume by a folder it is mounted in. */
+  function volumeAt(n, pn) { const d = disk(n), p = findPart(n, pn); return d && p ? volumeOf(d, p) : null; }
+  function volumeByPath(path) {
+    const idx = mountIndex(), key = String(path).trim().replace(/\\*$/, '\\').toLowerCase();
+    for (const d of S().disks) for (const p of d.partitions) if (folderPaths(p, idx).some(x => x.toLowerCase() === key)) return volumeOf(d, p, idx);
+    return null;
   }
 
   // The Server service re-creates the administrative shares (ADMIN$, IPC$, C$, E$...) each time it starts.
@@ -297,7 +397,8 @@
     GB, MB,
     disks: () => S().disks.map(d => ({ ...d, unallocated: unallocated(d), largestFree: largestFree(d).size,
       status: !d.online ? 'Offline' : d.style === 'RAW' ? 'Not Initialized' : 'Online', partitions: d.partitions.slice() })),
-    disk, volumes: () => S().disks.filter(d => d.online).flatMap(d => d.partitions.filter(p => p.type !== 'Reserved').map(p => volumeOf(d, p))),
+    disk, volumes: () => { const idx = mountIndex(); return S().disks.filter(d => d.online).flatMap(d => d.partitions.filter(p => p.type !== 'Reserved').map(p => volumeOf(d, p, idx))); },
+    volumeAt, volumeByPath, addAccessPath, removeAccessPath, checkAccessPath: f => { const r = checkAccessPath(f); delete r.node; return r; }, mountTarget, mountTargetPath,
     volume: letter => { const h = byLetter(letter); return h ? volumeOf(h.disk, h.part) : null; },
     byLetter, freeLetters, nextLetter, isCdrom: l => !!S().cdrom && S().cdrom.letter === String(l).toUpperCase(),
     cdrom: () => S().cdrom, freeRegions: n => freeRegions(disk(n)), usedBytes, AU, defaultAu,

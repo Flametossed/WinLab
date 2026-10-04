@@ -77,7 +77,7 @@
     t('too large a size is refused', dlgText().includes('Specify a size between 8 MB and 40942 MB') && wz.page.id === 'size');
     await click('OK');
     fill('size', '30720', wz.el); await click('Next >', wz.el);
-    t('drive letter page offers E first', wz.page.id === 'letter' && input('letter', wz.el).value === 'E' && input('letterMode-mount', wz.el).disabled);
+    t('drive letter page offers E first', wz.page.id === 'letter' && input('letter', wz.el).value === 'E' && !input('letterMode-mount', wz.el).disabled && input('folder', wz.el).disabled);
     if (stop('wizard')) return;
     await click('Next >', wz.el);
     t('format page defaults: NTFS, Default, New Volume, quick format', input('fs', wz.el).value === 'NTFS' && input('au', wz.el).value === '0' && input('label', wz.el).value === 'New Volume' && input('quick', wz.el).checked);
@@ -120,7 +120,7 @@
     WS.fs.writeFile('E:\\keep.txt', 'data');
     let ldlg, edlg;
     busy = DM.changeLetter('part:1:2', { onCreate: f => { ldlg = f; }, onEdit: f => { edlg = f; } }); await wait(80);
-    t('dialog lists E: with Change and Remove', ldlg.box.querySelector('[data-field="paths"]').textContent === 'E:' && button('Add...').disabled && !button('Change...').disabled);
+    t('dialog lists E: with Change and Remove (Add... stays on for folder paths)', ldlg.box.querySelector('[data-field="paths"]').textContent === 'E:' && !button('Add...').disabled && !button('Change...').disabled);
     if (stop('letter')) return;
     await click('Change...');
     t('Change dialog asks for the new letter', dlgText().includes('Enter a new drive letter or path for SQLData (E:).'));

@@ -169,6 +169,17 @@
 .fss-props .nav > div.sel { background: #cfe3f8; }
 .fss-props .pg { padding: 4px 16px; overflow: auto; }
 .fss-props .pg h4 { margin: 0 0 10px; font-size: 15px; font-weight: 400; }
+.fss-volprops { height: 380px; }
+.fss-volprops .frow { margin: 0 0 10px 12px; }
+.fss-volprops .frow .flabel { color: #555; }
+.fss-usage { display: flex; align-items: center; gap: 10px; margin: 0 0 0 12px; max-width: 420px; }
+.fss-usage .fss-pct { margin: 0; flex: 1; }
+.fss-usage span { white-space: nowrap; color: #555; }
+.fss-letter { display: flex; align-items: center; gap: 8px; }
+.fss-pathrow { display: flex; gap: 8px; margin-top: 4px; }
+.fss-paths { flex: 1; min-height: 110px; }
+.fss-pathbtns { display: flex; flex-direction: column; gap: 6px; }
+.fss-pathbtns .btn { min-width: 80px; }
 .fss-wz .lv.disabled { opacity: .55; pointer-events: none; }
 .wz-hint { margin: 0 0 8px 22px; color: #555; }
 .wz-hvnics { border-collapse: collapse; width: 100%; border: 1px solid #d9d9d9; }

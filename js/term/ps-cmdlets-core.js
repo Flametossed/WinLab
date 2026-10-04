@@ -17,15 +17,15 @@
   /* ================================================================ file system objects */
   function modeOf(st) {
     const a = st.attrs || '';
-    return (st.type === 'dir' ? 'd' : '-') + (st.type === 'file' ? 'a' : '-') + (a.includes('R') ? 'r' : '-') + (a.includes('H') ? 'h' : '-') + (a.includes('S') ? 's' : '-') + '-';
+    return (st.type === 'dir' ? 'd' : '-') + (st.type === 'file' ? 'a' : '-') + (a.includes('R') ? 'r' : '-') + (a.includes('H') ? 'h' : '-') + (a.includes('S') ? 's' : '-') + (st.junction ? 'l' : '-');
   }
   function itemObj(st) {
     const parent = st.path.replace(/\\[^\\]+$/, '') || st.path.slice(0, 3);
     const p = { Mode: modeOf(st), LastWriteTime: new Date(st.modified), Length: st.type === 'file' ? st.size : null, Name: st.name, FullName: st.path,
-      Extension: st.extension, CreationTime: new Date(st.created), LastAccessTime: new Date(st.modified), Attributes: st.type === 'dir' ? 'Directory' : 'Archive', PSIsContainer: st.type === 'dir',
+      Extension: st.extension, CreationTime: new Date(st.created), LastAccessTime: new Date(st.modified), Attributes: st.junction ? 'Directory, ReparsePoint' : st.type === 'dir' ? 'Directory' : 'Archive', PSIsContainer: st.type === 'dir',
       PSPath: 'Microsoft.PowerShell.Core\\FileSystem::' + st.path, PSParentPath: 'Microsoft.PowerShell.Core\\FileSystem::' + (parent.length === 2 ? parent + '\\' : parent), PSChildName: st.name, PSDrive: st.path[0], PSProvider: 'Microsoft.PowerShell.Core\\FileSystem',
       BaseName: st.type === 'file' && st.extension ? st.name.slice(0, -st.extension.length) : st.name };
-    if (st.type === 'dir') { delete p.Length; p.Parent = parent.replace(/^.*\\/, ''); p.Root = st.path.slice(0, 3); }
+    if (st.type === 'dir') { delete p.Length; p.Parent = parent.replace(/^.*\\/, ''); p.Root = st.path.slice(0, 3); if (st.junction) { p.LinkType = 'Junction'; p.Target = [st.junction]; } }
     else { p.DirectoryName = parent.length === 2 ? parent + '\\' : parent; p.IsReadOnly = (st.attrs || '').includes('R'); }
     return psobj(st.type === 'dir' ? 'System.IO.DirectoryInfo' : 'System.IO.FileInfo', p, { str: st.name, hidden: { __parent: p.PSParentPath.replace(/^.*::/, '') } });
   }

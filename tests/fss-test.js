@@ -119,7 +119,7 @@
     if (stop('nvsize')) return;
     t('the first free letter is offered (E:, because the DVD drive has D:)', fieldIn(nv.page._el, 'letter').value === 'E' && ![...fieldIn(nv.page._el, 'letter').options].some(o => o.value === 'C' || o.value === 'D'));
     fieldIn(nv.page._el, 'assign-folder').click(); nv.next(); await wait(80);
-    t('mounting in a folder explains it is not modelled', dlgText().includes('not available in the lab simulator'));
+    t('a folder needs a path (the mount test covers folders fully)', dlgText().includes('Type the path of an empty folder on an NTFS volume'));
     await click('OK');
     fieldIn(nv.page._el, 'assign-letter').click();
     type(fieldIn(nv.page._el, 'letter'), 'F'); await nv.next(); await wait(40);
@@ -149,7 +149,7 @@
     let fm = M.volume(R.volumes().find(r => r.volume === 'F:'));
     t('F: can be extended, formatted and deleted', ['Extend Volume...', 'Format...', 'Delete Volume', 'Manage Drive Letter and Access Paths...'].every(l => !item(fm, l).disabled));
     busy = item(fm, 'Properties').action(); await wait(80);
-    t("Properties opens the volume's property sheet", dlgText().includes('(F:) Properties') && dlgText().includes('ReFS'), dlgText().slice(0, 200));
+    t("Properties opens Server Manager's own volume Properties", dlgText().startsWith('F: Properties') && dlgText().includes('File system:ReFS') && dlgText().includes('Label:'), dlgText().slice(0, 200));
     await click('Cancel'); await busy;
     let ex = null;
     busy = WS.smfss.extendVolume('F', { onCreate: fr => { ex = fr; } }); await wait(60);

@@ -133,7 +133,7 @@
     if (!region) return Promise.resolve(null);
     const W = 'New Simple Volume Wizard', g = U.uid('nsv'), c = {};
     const maxMB = mb(region.size), minMB = 8;
-    const data = { sizeMB: maxMB, letterMode: 'assign', letter: S.nextLetter(), format: true, fs: 'NTFS', au: 0, label: 'New Volume', quick: true, compress: false };
+    const data = { sizeMB: maxMB, letterMode: 'assign', letter: S.nextLetter(), folder: '', format: true, fs: 'NTFS', au: 0, label: 'New Volume', quick: true, compress: false };
     const radio = (key, value, label, o = {}) => field(key + '-' + value, F.radio(g + key, label, data[key] === value, { disabled: o.disabled, onChange: v => { if (v) { data[key] = value; if (o.on) o.on(); } } }));
     const lw = { labelWidth: 210 };
     function fillAu() {
@@ -167,14 +167,29 @@
       { id: 'letter', title: 'Assign Drive Letter or Path', subtitle: 'For easier access, you can assign a drive letter or drive path to your partition.',
         render: () => {
           c.letter = field('letter', F.select(S.freeLetters().map(l => ({ value: l, label: l })), data.letter, { width: 60, onChange: v => { data.letter = v; } }));
-          const paint = () => { c.letter.disabled = data.letterMode !== 'assign'; };
+          c.folder = field('folder', F.text({ value: data.folder, width: 250 }));
+          c.folder.addEventListener('input', () => { data.folder = c.folder.value; });
+          c.browse = F.button('Browse...', async () => {
+            const p = await WS.ui.filePicker({ mode: 'folder', title: 'Browse for Drive Path', prompt: 'Select an empty folder on an NTFS volume.', path: c.folder.value || 'C:\\' });
+            if (p) { c.folder.value = p; data.folder = p; }
+          });
+          const paint = () => { c.letter.disabled = data.letterMode !== 'assign'; c.folder.disabled = c.browse.disabled = data.letterMode !== 'mount'; };
           c.assign = radio('letterMode', 'assign', 'Assign the following drive letter:', { on: paint });
-          c.mount = radio('letterMode', 'mount', 'Mount in the following empty NTFS folder:', { disabled: true });
+          c.mount = radio('letterMode', 'mount', 'Mount in the following empty NTFS folder:', { on: paint });
           c.none = radio('letterMode', 'none', 'Do not assign a drive letter or drive path', { on: paint });
+          paint();
           return h('div.dm-wz',
             h('div.dm-line', c.assign, c.letter),
-            c.mount, h('div.dm-indent.dm-line', F.text({ disabled: true, width: 250 }), F.button('Browse...', () => {}, { disabled: true })),
+            c.mount, h('div.dm-indent.dm-line', c.folder, c.browse),
             c.none);
+        },
+        validate: () => {
+          if (data.letterMode !== 'mount') return null;
+          if (!data.folder.trim()) return 'Specify the path of an empty folder on an NTFS volume.';
+          const r = S.checkAccessPath(data.folder);
+          if (!r.ok) return mountError(r);
+          data.folder = r.path.replace(/\\$/, '');
+          return null;
         } },
       { id: 'format', title: 'Format Partition', subtitle: 'To store data on this partition, you must format it first.',
         render: () => {
@@ -212,7 +227,7 @@
       { id: 'complete', kind: 'complete', title: 'Completing the New Simple Volume Wizard', rerender: true,
         render: () => {
           const lines = [['Volume type', 'Simple Volume'], ['Disk selected', `Disk ${n}`], ['Volume size', `${data.sizeMB} MB`],
-            ['Drive letter or path', data.letterMode === 'assign' ? data.letter + ':' : 'None'],
+            ['Drive letter or path', data.letterMode === 'assign' ? data.letter + ':' : data.letterMode === 'mount' ? data.folder : 'None'],
             ...(data.format ? [['File system', data.fs], ['Allocation unit size', data.au ? auLabel(data.au) : 'Default'], ['Volume label', data.label], ['Quick format', data.quick ? 'Yes' : 'No']] : [['File system', 'None']])];
           return h('div.dm-wtext', h('p', 'You have successfully completed the New Simple Volume Wizard.'), h('p', 'You selected the following settings:'),
             h('div.dm-summary', { dataset: { field: 'summary' } }, ...lines.map(([k, v]) => h('div', `${k}: ${v}`))), h('p', 'To close this wizard, click Finish.'));
@@ -227,6 +242,7 @@
           const f = S.format({ disk: r.disk, part: r.partition }, { fs: data.fs, label: data.label, au: data.au, compress: data.compress });
           if (!f.ok) return f;
         }
+        if (data.letterMode === 'mount') { const a = S.addAccessPath(r.disk.number, r.partition.number, data.folder); if (!a.ok) return { ok: false, error: mountError(a) }; }
         if (opts.ctl) opts.ctl.select(partId(r.disk, r.partition));
         return true;
       } }).then(res => (res.finished ? data : null));
@@ -260,33 +276,66 @@
       } });
   }
 
+  /** Disk Management's wording for a folder that can't hold a mount point. */
+  const mountError = r => ({ PathNotFound: 'The path you specified does not exist. Specify an existing empty folder on an NTFS volume.',
+    NotEmpty: 'The folder you specified is not empty. You can mount a drive only in an empty folder on an NTFS volume.',
+    NotNtfs: 'You can mount a drive only in an empty folder on an NTFS volume. The folder you specified is not on an NTFS volume.',
+    InUse: 'The path you specified is already in use by another volume.', SameVolume: 'You cannot mount a drive in a folder on the same drive.',
+    InvalidPath: 'The path you specified is not valid. Specify the full path of an empty folder, such as C:\\Data.' }[r.code] || r.error);
+  /** Add/Change Drive Letter or Path: the letter radio, and "Mount in the following empty NTFS folder" with its path and Browse.... */
+  function mountControls(o) {
+    const g = U.uid('mnt');
+    const folder = field('folder', F.text({ value: o.folder || '', width: 230, disabled: true }));
+    const browse = F.button('Browse...', async () => {
+      const p = await WS.ui.filePicker({ mode: 'folder', title: 'Browse for Drive Path', prompt: 'Select an empty folder on an NTFS volume.', path: folder.value || 'C:\\' });
+      if (p) { folder.value = p; folder.dispatchEvent(new Event('input')); }
+    }, { disabled: true });
+    let mode = o.mode;
+    const paint = () => { o.letter.disabled = mode !== 'assign'; folder.disabled = browse.disabled = mode !== 'mount'; };
+    const radio = (m, label, dis) => field(m, F.radio(g, label, mode === m, { disabled: !!dis, onChange: on => { if (on) { mode = m; paint(); } } }));
+    const r = { assign: radio('assign', 'Assign the following drive letter:', o.noLetter), mount: radio('mount', 'Mount in the following empty NTFS folder:', o.noMount) };
+    paint();
+    return { ...r, folder, browse, mode: () => mode };
+  }
+
   /** Change Drive Letter and Paths for a volume or the DVD drive; Add/Change/Remove apply at once, as in Windows. */
   function changeLetter(id, opts = {}) {
     const o = resolve(id);
     if (!o || (o.kind !== 'part' && o.kind !== 'cdrom')) return Promise.resolve(null);
     const cd = o.kind === 'cdrom';
     const cur = () => (cd ? S.cdrom().letter : resolve(id) && resolve(id).part.letter);
+    const folders = () => (cd ? [] : (S.volumeAt(o.disk.number, o.part.number) || { paths: [] }).paths);
     const name = () => (cd ? `${cur() ? cur() + ': ' : ''}()` : volName(o.disk, resolve(id).part));
     const box = field('paths', h('select.inp.dm-paths', { size: 6 }));
     const frame = WS.ui.modal({ title: `Change Drive Letter and Paths for ${name()}`, width: 420, className: 'w32-dlg dm-dlg', closeValue: null });
     const add = field('add', F.button('Add...', () => edit(false))), change = field('change', F.button('Change...', () => edit(true))), remove = field('remove', F.button('Remove', () => drop()));
+    const selected = () => box.value || '';
+    const isLetter = x => /^[A-Z]:$/.test(x);
+    const buttons = () => { change.disabled = !isLetter(selected()); remove.disabled = !selected(); };
     const paint = () => {
       U.clear(box);
-      if (cur()) box.appendChild(h('option', { value: cur(), selected: true }, cur() + ':'));
-      add.disabled = !!cur(); change.disabled = remove.disabled = !cur();
+      const items = [...(cur() ? [cur() + ':'] : []), ...folders()];
+      items.forEach((x, i) => box.appendChild(h('option', { value: x, selected: i === 0 }, x)));
+      // a volume can have one letter and any number of folder paths; the DVD drive only a letter here
+      add.disabled = cd ? !!cur() : false;
+      buttons();
       frame.setTitle(`Change Drive Letter and Paths for ${name()}`);
     };
+    box.addEventListener('change', buttons);
     const apply = l => (cd ? S.setCdromLetter(l) : cur() ? S.setLetter(cur(), l) : S.assignLetter(o.disk.number, o.part.number, l));
     async function edit(isChange) {
-      const g = U.uid('cdl');
       const letters = S.freeLetters();
       const sel = field('letter', F.select(letters.map(l => ({ value: l, label: l })), isChange ? letters.find(l => l > cur()) || letters[0] : S.nextLetter() || letters[0], { width: 60 }));
+      const m = mountControls({ letter: sel, mode: !isChange && cur() ? 'mount' : 'assign', noLetter: !isChange && !!cur(), noMount: cd || isChange });
       const content = h('div.dm-form', isChange ? h('p.dm-p', `Enter a new drive letter or path for ${name()}.`) : null,
-        h('div.dm-line', field('assign', F.radio(g, 'Assign the following drive letter:', true)), sel),
-        field('mount', F.radio(g, 'Mount in the following empty NTFS folder:', false, { disabled: true })),
-        h('div.dm-indent.dm-line', F.text({ disabled: true, width: 230 }), F.button('Browse...', () => {}, { disabled: true })));
+        h('div.dm-line', m.assign, sel), m.mount, h('div.dm-indent.dm-line', m.folder, m.browse));
       const r = await formDialog({ title: isChange ? 'Change Drive Letter or Path' : 'Add Drive Letter or Path', width: 400, content, onCreate: opts.onEdit,
         ok: async () => {
+          if (m.mode() === 'mount') {
+            if (!m.folder.value.trim()) return 'Specify the path of an empty folder on an NTFS volume.';
+            const res = S.addAccessPath(o.disk.number, o.part.number, m.folder.value);
+            return res.ok ? true : mountError(res);
+          }
           if (isChange && cur()) {
             const ans = await WS.ui.msgbox({ title: TITLE, icon: 'warning', message: 'Some programs that rely on drive letters might not run correctly. Do you want to continue?', buttons: ['Yes', 'No'] });
             if (ans !== 'Yes') return false;
@@ -297,9 +346,12 @@
       if (r) paint();
     }
     async function drop() {
-      const ans = await WS.ui.msgbox({ title: TITLE, icon: 'warning', message: 'Some programs that rely on drive letters might not run correctly. Are you sure you want to remove this drive letter?', buttons: ['Yes', 'No'] });
+      const x = selected();
+      if (!x) return;
+      const letter = isLetter(x);
+      const ans = await WS.ui.msgbox({ title: TITLE, icon: 'warning', message: letter ? 'Some programs that rely on drive letters might not run correctly. Are you sure you want to remove this drive letter?' : 'Some programs that rely on drive paths might not run correctly. Are you sure you want to remove this drive path?', buttons: ['Yes', 'No'] });
       if (ans !== 'Yes') return;
-      const r = apply(null);
+      const r = letter ? apply(null) : S.removeAccessPath(o.disk.number, o.part.number, x);
       if (!r.ok) await err(r);
       paint();
     }
@@ -307,7 +359,7 @@
     const okBtn = h('button.btn.primary', { onClick: () => frame.close(true) }, 'OK');
     frame.footer.append(okBtn, h('button.btn', { onClick: () => frame.close(null) }, 'Cancel'));
     frame.onEnter = () => frame.close(true); frame.onEscape = () => frame.close(null);
-    Object.assign(frame, { add: () => edit(false), change: () => edit(true), remove: drop });
+    Object.assign(frame, { add: () => edit(false), change: () => edit(true), remove: drop, select: x => { box.value = x; buttons(); } });
     paint();
     if (opts.onCreate) opts.onCreate(frame);
     WS.ui.focusFirst(frame);
@@ -461,7 +513,7 @@
     let labelBox;
     const tabs = [
       { label: 'General', render: () => {
-        labelBox = field('label', F.text({ value: p.label, width: 220, maxLength: 32, readOnly: !p.letter || !p.fs }));
+        labelBox = field('label', F.text({ value: p.label, width: 220, maxLength: 32, readOnly: !p.fs }));
         const used = p.fs ? v.used : 0, free = p.fs ? v.free : p.size;
         const pct = p.size ? used / p.size * 100 : 0;
         const lw = { labelWidth: 90 };
@@ -482,7 +534,7 @@
       },
       apply: () => {
         if (!labelBox || labelBox.readOnly || labelBox.value === p.label) return null;
-        return S.setLabel(p.letter, labelBox.value);
+        return S.setLabel({ disk: d, part: p }, labelBox.value);
       } },
       { label: 'Tools', render: () => h('div',
         F.group('Error checking', h('div.dm-tool', h('div', 'This option will check the drive for file system errors.'), F.button('Check', () => checkDrive(p), { disabled: !p.fs || !p.letter }))),

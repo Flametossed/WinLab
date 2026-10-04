@@ -559,7 +559,7 @@
   cmdlet({ name: 'Clear-Disk', module: ST, version: '2.0.0.0', shouldProcess: true, impact: 'High', params: { Number: { type: 'int[]', pos: 0, pipe: 'name' }, RemoveData: { type: 'switch' }, RemoveOEM: { type: 'switch' }, InputObject: { type: 'object', pipe: 'value', accepts: v => /MSFT_Disk/.test(PS.typeName(v)) } },
     async process(ctx, p, item) { for (const n of diskNums(p, item) || []) { if (!(await ctx.confirm('Clear-Disk', `Disk ${n}`, { impact: 'High', query: `Are you sure you want to perform this action?\nThis will erase all data on disk ${n} "Msft Virtual Disk".` }))) continue; const r = WS.storage.clearDisk(n); if (!r.ok) cimError(ctx, r.error, { cls: 'MSFT_Disk', ns: 'ROOT/Microsoft/Windows/Storage', code: 5 }); } } });
   const partObj = (d, pt) => psobj('Microsoft.Management.Infrastructure.CimInstance#ROOT/Microsoft/Windows/Storage/MSFT_Partition', {
-    DiskNumber: d.number, PartitionNumber: pt.number, DriveLetter: pt.letter || '', Offset: pt.offset, Size: pt.size, Type: pt.type, IsBoot: pt.letter === 'C', IsSystem: pt.type === 'System', IsActive: false, IsHidden: pt.type !== 'Basic', GptType: pt.type === 'Basic' ? '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' : '{e3c9e316-0b5c-4db8-817d-f92df00215ae}', AccessPaths: pt.letter ? [pt.letter + ':\\'] : [], DiskPath: `\\\\?\\scsi#disk&ven_msft&prod_virtual_disk#5&${d.number}`
+    DiskNumber: d.number, PartitionNumber: pt.number, DriveLetter: pt.letter || '', Offset: pt.offset, Size: pt.size, Type: pt.type, IsBoot: pt.letter === 'C', IsSystem: pt.type === 'System', IsActive: false, IsHidden: pt.type !== 'Basic', GptType: pt.type === 'Basic' ? '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' : '{e3c9e316-0b5c-4db8-817d-f92df00215ae}', AccessPaths: (WS.storage.volumeAt(d.number, pt.number) || {}).accessPaths || [], DiskPath: `\\\\?\\scsi#disk&ven_msft&prod_virtual_disk#5&${d.number}`
   }, { str: `Partition ${pt.number}` });
   view('Microsoft.Management.Infrastructure.CimInstance#ROOT/Microsoft/Windows/Storage/MSFT_Partition', { table: { groupBy: { label: 'DiskPath', value: o => o.DiskPath, indent: 3 }, columns: [
     { label: 'PartitionNumber', width: 15, value: 'PartitionNumber' }, { label: 'DriveLetter', width: 11, value: 'DriveLetter' }, { label: 'Offset', width: 13, value: 'Offset' }, { label: 'Size', width: 33, align: 'right', value: o => sizeText(o.Size) }, { label: 'Type', value: 'Type' }] } });
@@ -633,8 +633,32 @@
         if (!r.ok) cimError(ctx, r.code === 'LetterInUse' ? 'The requested access path is already in use.' : r.error, { cls: 'MSFT_Partition', ns: 'ROOT/Microsoft/Windows/Storage', code: 42002 });
       }
     } });
-  cmdlet({ name: 'Add-PartitionAccessPath', module: ST, version: '2.0.0.0', params: { DiskNumber: { type: 'int' }, PartitionNumber: { type: 'int' }, AccessPath: {}, AssignDriveLetter: { type: 'switch' } },
-    process(ctx, p) { const r = WS.storage.assignLetter(p.DiskNumber, p.PartitionNumber, p.AssignDriveLetter ? 'auto' : String(p.AccessPath || '')[0]); if (!r.ok) cimError(ctx, r.error, { cls: 'MSFT_Partition', ns: 'ROOT/Microsoft/Windows/Storage', code: 42002 }); } });
+  /** The partition a Storage cmdlet names: -DiskNumber/-PartitionNumber, -DriveLetter, or a piped MSFT_Partition. */
+  function partitionArg(ctx, p, item) {
+    if (item && /MSFT_Partition/.test(PS.typeName(item))) return { n: item.DiskNumber, pn: item.PartitionNumber };
+    if (p.DriveLetter) { const h = WS.storage.byLetter(p.DriveLetter); if (!h) { notFound(ctx, 'MSFT_Partition', 'DriveLetter', p.DriveLetter); return null; } return { n: h.disk.number, pn: h.part.number }; }
+    if (p.DiskNumber == null || p.PartitionNumber == null) { ctx.throw({ message: 'Parameter set cannot be resolved using the specified named parameters.', category: 'InvalidArgument', exception: 'ParameterBindingException', id: 'AmbiguousParameterSet' }); return null; }
+    return { n: p.DiskNumber, pn: p.PartitionNumber };
+  }
+  const accessParams = { DiskNumber: { type: 'int', pipe: 'name' }, PartitionNumber: { type: 'int', pipe: 'name' }, DriveLetter: {}, AccessPath: { pos: 0 }, InputObject: { type: 'object', pipe: 'value', accepts: v => /MSFT_Partition/.test(PS.typeName(v)) } };
+  const accessError = (ctx, r) => cimError(ctx, r.code === 'NotEmpty' || r.code === 'PathNotFound' || r.code === 'InvalidPath' || r.code === 'NotNtfs' || r.code === 'SameVolume' ? 'The access path is not valid.' : r.code === 'InUse' ? 'The requested access path is already in use.' : r.error,
+    { cls: 'MSFT_Partition', ns: 'ROOT/Microsoft/Windows/Storage', code: r.code === 'InUse' || r.code === 'LetterInUse' ? 42002 : 42012, category: 'InvalidArgument' });
+  cmdlet({ name: 'Add-PartitionAccessPath', module: ST, version: '2.0.0.0', synopsis: 'Adds an access path such as a drive letter or folder to a partition.', params: { ...accessParams, AssignDriveLetter: { type: 'switch' }, PassThru: { type: 'switch' } },
+    process(ctx, p, item) {
+      const t = partitionArg(ctx, p, item); if (!t) return;
+      if (!p.AccessPath && !p.AssignDriveLetter) ctx.throw({ message: 'Parameter set cannot be resolved using the specified named parameters.', category: 'InvalidArgument', exception: 'ParameterBindingException', id: 'AmbiguousParameterSet,Add-PartitionAccessPath' });
+      const r = p.AssignDriveLetter ? WS.storage.assignLetter(t.n, t.pn, 'auto') : WS.storage.addAccessPath(t.n, t.pn, String(p.AccessPath));
+      if (!r.ok) return accessError(ctx, r);
+      if (p.PassThru) ctx.out(partObj(WS.storage.disk(t.n), WS.storage.disk(t.n).partitions.find(x => x.number === t.pn)));
+    } });
+  cmdlet({ name: 'Remove-PartitionAccessPath', module: ST, version: '2.0.0.0', synopsis: 'Removes an access path such as a drive letter or folder from a partition.', params: { ...accessParams, PassThru: { type: 'switch' } },
+    process(ctx, p, item) {
+      const t = partitionArg(ctx, p, item); if (!t) return;
+      if (!p.AccessPath) ctx.throw({ message: "Cannot process command because of one or more missing mandatory parameters: AccessPath.", category: 'InvalidArgument', exception: 'ParameterBindingException', id: 'MissingMandatoryParameter,Remove-PartitionAccessPath' });
+      const r = WS.storage.removeAccessPath(t.n, t.pn, String(p.AccessPath));
+      if (!r.ok) return accessError(ctx, r);
+      if (p.PassThru) ctx.out(partObj(WS.storage.disk(t.n), WS.storage.disk(t.n).partitions.find(x => x.number === t.pn)));
+    } });
   cmdlet({ name: 'Resize-Partition', module: ST, version: '2.0.0.0', params: { DriveLetter: { pos: 0, pipe: 'name' }, Size: { type: 'uint64', pos: 1, mandatory: true } },
     process(ctx, p) { const r = WS.storage.resize(p.DriveLetter, p.Size); if (!r.ok) cimError(ctx, r.error, { cls: 'MSFT_Partition', ns: 'ROOT/Microsoft/Windows/Storage', code: 40002, category: 'NotSpecified' }); } });
   cmdlet({ name: 'Get-PartitionSupportedSize', module: ST, version: '2.0.0.0', params: { DriveLetter: { pos: 0, pipe: 'name' } },
