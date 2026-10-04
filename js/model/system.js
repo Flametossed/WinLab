@@ -1,6 +1,6 @@
 /* System model: computer identity, domain role, time zone, Remote Desktop, restart handling.
  * Other model modules hook into boot/shutdown with WS.sys.on('boot' | 'shutdown', fn).
- * State: state.system (see HANDOFF.md "State paths"). */
+ * State: state.system. */
 (function () {
   'use strict';
   const WS = window.WS;

@@ -2,7 +2,7 @@
  * and a few "internet" hosts). Name resolution follows the Windows order: hosts file -> DNS
  * servers in order (a local DNS role answers for 127.0.0.1 / own IP) -> LLMNR for single-label
  * names on the subnet. ping() gives the real Windows failure messages.
- * State: network.adapters[i] (see HANDOFF.md), network.lan (the lab network), network.peers. */
+ * State: network.adapters[i], network.lan (the lab network), network.peers. */
 (function () {
   'use strict';
   const WS = window.WS;

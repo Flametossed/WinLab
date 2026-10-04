@@ -4,7 +4,7 @@
  *   background() -> { kind, picture, color, policy } as the desktop shows it; backgroundCss(bg?) -> CSS background;
  *   apply() pushes the theme onto <html> (data-theme, data-apps-theme, --accent); addRun(text) records Run history;
  *   snap() -> the Multitasking snap options (set({ snap: { ... } }) changes them).
- * State: state.personal (see HANDOFF.md "State paths"). */
+ * State: state.personal. */
 (function () {
   'use strict';
   const WS = window.WS;

@@ -1,5 +1,5 @@
 /* Model-layer smoke test. Open tests/model-test.html?quick=1 in a throwaway browser profile (it rewrites
- * the lab state in localStorage). Each result is a console line: PASS / FAIL / RESULT. See HANDOFF.md. */
+ * the lab state in localStorage). Each result is a console line: PASS / FAIL / RESULT. */
 (function () {
   const WS = window.WS;
   let pass = 0, fail = 0;

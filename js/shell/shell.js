@@ -53,7 +53,7 @@
     w.body.appendChild(h('div', { style: 'padding:20px;display:flex;gap:14px' },
       h('div', { html: I.info, style: 'width:32px;flex:none' }),
       h('div', h('div', { style: 'font-weight:600;margin-bottom:6px' }, `"${name}" is not built yet.`),
-        h('div', { style: 'color:#555' }, 'This tool is planned but not part of the current skeleton. See HANDOFF.md.'))));
+        h('div', { style: 'color:#555' }, 'This tool is not part of the lab or has not been implemented yet.'))));
     return w;
   }
   WS.apps.notImplemented = notImplemented;
