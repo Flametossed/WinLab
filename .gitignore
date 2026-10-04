@@ -2,3 +2,6 @@
 .test-output/
 .DS_Store
 Thumbs.db
+
+# developer notes (kept local)
+HANDOFF.md
