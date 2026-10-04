@@ -2,6 +2,8 @@
 
 **A Windows Server 2025 lab you can open in a browser tab.** Start in seconds, get live feedback as you work, and explore a full server environment without setting up a VM.
 
+**[Try it in your browser →](https://flametossed.github.io/WinLab/)**
+
 ![An active lab in WinLab: the Lab Guide tracks objectives while Server Manager runs, and a toast pops up each time one is completed](docs/screenshots/lab-progress.jpg)
 
 ## Why WinLab
@@ -45,11 +47,10 @@ Open **Lab Guide** on the desktop, pick a lab and press **Start lab**. The serve
 
 ## Getting started
 
-1. Download or clone this repository.
-2. Open `index.html` in Chrome, Edge or Firefox.
-3. Go through first-time setup: choose an Administrator password that meets the complexity rules, then sign in.
+1. Open **[flametossed.github.io/WinLab](https://flametossed.github.io/WinLab/)**, or download this repository and open `index.html` in Chrome, Edge or Firefox.
+2. After it boots, choose an Administrator password that meets the complexity rules, then sign in.
 
-To skip boot and sign-in, open `index.html?quick=1`. If setup hasn't been done, the password is set to `P@ssw0rd!`.
+To skip boot and sign-in, add `?quick=1` to the address ([try it](https://flametossed.github.io/WinLab/?quick=1)). If setup hasn't been done, the password is set to `P@ssw0rd!`.
 
 Your server is saved in the browser's local storage, so it's still there next time. To start over, use **Reset the lab** on the sign-in screen.
 
