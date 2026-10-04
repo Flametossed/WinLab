@@ -230,16 +230,24 @@
       body = h('div.tm-body');
       content.append(head, body);
     }
-    /** Command bar buttons: [{ label, icon, action, disabled, menu }] */
+    /** Command bar buttons: [{ label, icon, action, disabled, menu }]. The live refresh calls this every tick, so
+     *  when the buttons are the same they are updated in place: replacing a button between mousedown and mouseup
+     *  would swallow the click. */
+    const cmdSig = c => [c.label, c.icon, c.text === false, !!c.menu].join('\u0001');
     function setCommands(list) {
       // Remove Run menu from Start Menu also removes Task Manager's Run new task
-      cmds = list.filter(Boolean).filter(c => !(c.label === 'Run new task' && WS.shell.restricted('run')));
+      const next = list.filter(Boolean).filter(c => !(c.label === 'Run new task' && WS.shell.restricted('run')));
+      const same = cmdbar.children.length === next.length && next.length === cmds.length && next.every((c, i) => cmdSig(c) === cmdSig(cmds[i]));
+      cmds = next;
+      if (same) { cmds.forEach((c, i) => { cmdbar.children[i].disabled = !!c.disabled; }); return; }
       U.clear(cmdbar);
-      for (const c of cmds) {
+      cmds.forEach((_, i) => {
+        const c = cmds[i];
         const b = h('button.tm-cmd', { disabled: !!c.disabled, title: c.label, dataset: { cmd: c.label } }, h('span.tm-cmdico', { html: CMD_ICONS[c.icon] || '' }), c.text === false ? null : h('span', c.label), c.menu ? h('span.tm-caret', '\u2304') : null);
-        b.addEventListener('click', () => { if (c.menu) WS.ui.popupMenu(b, typeof c.menu === 'function' ? c.menu() : c.menu); else if (!b.disabled) c.action(); });
+        // read cmds[i] at click time: the action may have been replaced by a later refresh
+        b.addEventListener('click', () => { const cur = cmds[i]; if (cur.menu) WS.ui.popupMenu(b, typeof cur.menu === 'function' ? cur.menu() : cur.menu); else if (!b.disabled) cur.action(); });
         cmdbar.appendChild(b);
-      }
+      });
     }
 
     function go(page) {
@@ -269,7 +277,10 @@
     function schedule() { clearInterval(timer); const ms = SPEED[prefs().speed]; if (ms) timer = setInterval(tick, ms); }
     const soon = U.debounce ? U.debounce(refresh, 60) : refresh;
     win.listen('processes', soon); win.listen('services', soon); win.listen('taskmgr', soon);
-    const onWm = () => { if (!tm.closed) { soon(); applyOnTop(); } };
+    // every pointerdown in a window focuses it and emits, so only refresh when the windows themselves changed
+    const wmSig = () => WS.wm.windows.map(w => `${w.id}:${w.title}:${!!w.minimized}`).join('|');
+    let lastWm = wmSig();
+    const onWm = () => { if (tm.closed) return; const s = wmSig(); if (s !== lastWm) { lastWm = s; soon(); } applyOnTop(); };
     WS.wm.on(onWm);
     function applyOnTop() { if (prefs().alwaysOnTop && !tm.closed) win.el.style.zIndex = 50000; }
     win.onClose(() => { tm.closed = true; clearInterval(timer); });

@@ -186,6 +186,14 @@
     t('an app menu: Switch to, End task, ... Properties', ['Switch to', 'End task', 'Efficiency mode', 'Create memory dump file', 'Go to details', 'Open file location', 'Search online', 'Properties'].every(n => item(appMenu, n)));
     await T.command('End task'); await wait(60);
     t('End task closes Notepad at once', !one('notepad.exe') && !WS.wm.find('notepad'));
+    // a real press: pointerdown focuses the window and the live tick refreshes before mouseup; the button must survive
+    WS.apps.launch('notepad'); await wait(80);
+    T.select(T.nodes().find(n => n.name === 'Notepad').id);
+    const endBtn = win.el.querySelector('.tm-cmd[data-cmd="End task"]');
+    endBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); T.tick(); await wait(150);
+    t('the End task button survives a press (focus and tick do not replace it)', endBtn.isConnected && !endBtn.disabled);
+    endBtn.click(); await wait(60);
+    t('clicking that button ends Notepad', !one('notepad.exe') && !WS.wm.find('notepad'));
     const exNode = T.nodes().find(n => n.name === 'Windows Explorer');
     T.select(exNode.id);
     t('Windows Explorer: Restart instead of End task', T.commands().some(c => c.label === 'Restart') && !T.commands().some(c => c.label === 'End task'));
