@@ -17,7 +17,7 @@ Practising Windows Server usually means downloading an ISO, building a VM and re
 
 ## What's inside
 
-- **Server Manager:** Add Roles and Features, AD DS promotion, DHCP post-install and File and Storage Services.
+- **Server Manager:** Add Roles and Features, AD DS promotion, DHCP post-install and File and Storage Services (with Storage Spaces).
 - **Admin tools:** Active Directory Users and Computers, DNS Manager, DHCP, Group Policy Management (with the editor, `gpupdate`, `gpresult` and Drive Maps preferences), Event Viewer, Services, Computer Management, Disk Management, Windows Defender Firewall with Advanced Security, IIS Manager, Hyper-V Manager (with Virtual Machine Connection and a guest you can install) and Task Manager.
 - **Terminal:** PowerShell 5.1 and CMD tabs with an object pipeline, hundreds of cmdlets and native tools, and `sconfig`.
 - **Desktop apps:** File Explorer, Notepad, Settings, Control Panel, Network Connections and a mock Edge that browses the lab network.
@@ -45,6 +45,7 @@ Open **Lab Guide** on the desktop, pick a lab and press **Start lab**. The serve
 | 15: Hyper-V | Intermediate |
 | 16: Mapped drives with Group Policy Preferences | Intermediate |
 | 17: Drive letters and mount points | Intermediate |
+| 18: Storage Spaces | Intermediate |
 
 ## Getting started
 

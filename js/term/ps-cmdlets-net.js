@@ -530,16 +530,20 @@
   /* ================================================================ storage */
   const ST = 'Storage';
   const diskObj = d => psobj('Microsoft.Management.Infrastructure.CimInstance#ROOT/Microsoft/Windows/Storage/MSFT_Disk', {
-    Number: d.number, FriendlyName: d.model, SerialNumber: d.serial || '', HealthStatus: 'Healthy', OperationalStatus: d.online ? 'Online' : 'Offline', Size: d.size, PartitionStyle: d.style,
-    IsOffline: !d.online, IsReadOnly: d.readOnly, IsBoot: d.boot, IsSystem: d.boot, NumberOfPartitions: d.partitions.length, AllocatedSize: d.size - d.unallocated, BusType: 'SCSI', Path: `\\\\?\\scsi#disk&ven_msft&prod_virtual_disk#5&${d.number}`, OfflineReason: d.online ? null : 'Policy', UniqueId: '60022480' + U.hashStr('disk' + d.number).toString(16)
+    Number: d.number, FriendlyName: d.space ? (WS.spaces.spaceOfDisk(d.number) || {}).name || d.model : d.model, SerialNumber: d.serial || '', HealthStatus: d.space ? (WS.spaces.spaceOfDisk(d.number) || {}).healthStatus || 'Healthy' : 'Healthy',
+    OperationalStatus: d.online ? 'Online' : 'Offline', Size: d.size, PartitionStyle: d.style,
+    IsOffline: !d.online, IsReadOnly: d.readOnly, IsBoot: d.boot, IsSystem: d.boot, NumberOfPartitions: d.partitions.length, AllocatedSize: d.size - d.unallocated, BusType: d.space ? 'Spaces' : 'SCSI', Path: `\\\\?\\scsi#disk&ven_msft&prod_virtual_disk#5&${d.number}`, OfflineReason: d.online ? null : 'Policy', UniqueId: '60022480' + U.hashStr('disk' + d.number).toString(16)
   }, { str: `Disk ${d.number}` });
   view('Microsoft.Management.Infrastructure.CimInstance#ROOT/Microsoft/Windows/Storage/MSFT_Disk', { table: { columns: [
     { label: 'Number', width: 6, align: 'right', value: 'Number' }, { label: 'Friendly Name', width: 20, value: 'FriendlyName' }, { label: 'Serial Number', width: 14, value: 'SerialNumber' }, { label: 'HealthStatus', width: 12, value: 'HealthStatus' },
     { label: 'OperationalStatus', width: 17, value: 'OperationalStatus' }, { label: 'Total Size', width: 10, align: 'right', value: o => sizeText(o.Size).replace('.00 ', ' ') }, { label: 'Partition\nStyle', value: 'PartitionStyle' }] } });
   const findDisk = (ctx, n) => { const d = WS.storage.disks().find(x => x.number === +n); if (!d) notFound(ctx, 'MSFT_Disk', 'Number', n); return d; };
   const diskNums = (p, item) => (item && getProp(item, 'Number') != null && !p.Number ? [getProp(item, 'Number')] : p.Number != null ? toArray(p.Number) : null);
-  cmdlet({ name: 'Get-Disk', module: ST, version: '2.0.0.0', synopsis: 'Gets one or more disks visible to the operating system.', params: { Number: { type: 'int[]', pos: 0, alias: ['DeviceId'] }, FriendlyName: { type: 'string[]' } },
-    process(ctx, p) { const disks = WS.storage.disks(); if (!p.Number) { disks.forEach(d => ctx.out(diskObj(d))); return; } for (const n of p.Number) { const d = findDisk(ctx, n); if (d) ctx.out(diskObj(d)); } } });
+  cmdlet({ name: 'Get-Disk', module: ST, version: '2.0.0.0', synopsis: 'Gets one or more disks visible to the operating system.', params: { Number: { type: 'int[]', pos: 0, alias: ['DeviceId'] }, FriendlyName: { type: 'string[]' },
+    VirtualDisk: { type: 'object', pipe: 'value', accepts: v => /MSFT_VirtualDisk/.test(PS.typeName(v)) } },
+    process(ctx, p) {
+      if (p.VirtualDisk) { const v = WS.spaces.space(getProp(p.VirtualDisk, 'FriendlyName')); const d = v && WS.storage.disks().find(x => x.number === v.disk); if (d) ctx.out(diskObj(d)); return; }
+      const disks = WS.storage.disks(); if (!p.Number) { disks.forEach(d => ctx.out(diskObj(d))); return; } for (const n of p.Number) { const d = findDisk(ctx, n); if (d) ctx.out(diskObj(d)); } } });
   cmdlet({ name: 'Set-Disk', module: ST, version: '2.0.0.0', params: { Number: { type: 'int', pos: 0, pipe: 'name' }, InputObject: { type: 'object', pipe: 'value', accepts: v => /MSFT_Disk/.test(PS.typeName(v)) }, IsOffline: { type: 'bool' }, IsReadOnly: { type: 'bool' } },
     process(ctx, p, item) {
       const n = item ? getProp(item, 'Number') : p.Number;
@@ -663,6 +667,186 @@
     process(ctx, p) { const r = WS.storage.resize(p.DriveLetter, p.Size); if (!r.ok) cimError(ctx, r.error, { cls: 'MSFT_Partition', ns: 'ROOT/Microsoft/Windows/Storage', code: 40002, category: 'NotSpecified' }); } });
   cmdlet({ name: 'Get-PartitionSupportedSize', module: ST, version: '2.0.0.0', params: { DriveLetter: { pos: 0, pipe: 'name' } },
     process(ctx, p) { const s = WS.storage.supportedSize(p.DriveLetter); if (!s) return notFound(ctx, 'MSFT_Partition', 'DriveLetter', p.DriveLetter); ctx.out(psobj('Microsoft.Management.Infrastructure.CimMethodResult', { SizeMin: s.min, SizeMax: s.max })); } });
+
+  /* ================================================================ Storage Spaces (WS.spaces) */
+  const NS_ST = 'ROOT/Microsoft/Windows/Storage';
+  const T_PD = 'Microsoft.Management.Infrastructure.CimInstance#ROOT/Microsoft/Windows/Storage/MSFT_PhysicalDisk';
+  const T_POOL = 'Microsoft.Management.Infrastructure.CimInstance#ROOT/Microsoft/Windows/Storage/MSFT_StoragePool';
+  const T_VD = 'Microsoft.Management.Infrastructure.CimInstance#ROOT/Microsoft/Windows/Storage/MSFT_VirtualDisk';
+  const T_SS = 'Microsoft.Management.Infrastructure.CimInstance#ROOT/Microsoft/Windows/Storage/MSFT_StorageSubSystem';
+  const isType = re => v => re.test(PS.typeName(v));
+  const shortSize = b => sizeText(b).replace('.00 ', ' ');
+  const ssName = () => `Windows Storage on ${WS.sys.name}`;
+  const pdObj = d => psobj(T_PD, {
+    Number: d.deviceId === '' ? null : +d.deviceId, DeviceId: d.deviceId, FriendlyName: d.friendlyName, SerialNumber: '', UniqueId: d.uniqueId, MediaType: d.mediaType, CanPool: d.canPool,
+    CannotPoolReason: d.cannotPoolReason, OperationalStatus: d.operationalStatus, HealthStatus: d.healthStatus, Usage: d.usageLabel, Size: d.size, AllocatedSize: d.allocated, BusType: d.busType,
+    PhysicalLocation: `Integrated : Adapter 0 : Port 0 : Target 0 : LUN ${d.number}`, SpindleSpeed: 0, IsIndicationEnabled: false
+  }, { str: d.friendlyName });
+  view(T_PD, { table: { columns: [
+    { label: 'Number', width: 6, align: 'right', value: 'Number' }, { label: 'FriendlyName', width: 17, value: 'FriendlyName' }, { label: 'SerialNumber', width: 12, value: 'SerialNumber' },
+    { label: 'MediaType', width: 11, value: 'MediaType' }, { label: 'CanPool', width: 7, value: 'CanPool' }, { label: 'OperationalStatus', width: 18, value: 'OperationalStatus' },
+    { label: 'HealthStatus', width: 12, value: 'HealthStatus' }, { label: 'Usage', width: 13, value: 'Usage' }, { label: 'Size', align: 'right', value: o => shortSize(o.Size) }] } });
+  const poolObj = p => psobj(T_POOL, {
+    FriendlyName: p.name, OperationalStatus: p.operationalStatus, HealthStatus: p.healthStatus, IsPrimordial: p.primordial, IsReadOnly: p.readOnly, Size: p.size, AllocatedSize: p.allocated,
+    Description: p.description, ResiliencySettingNameDefault: 'Mirror', ProvisioningTypeDefault: 'Fixed', LogicalSectorSize: 512, PhysicalSectorSize: 4096, Version: p.primordial ? '' : 'Windows Server 2025'
+  }, { str: p.name });
+  view(T_POOL, { table: { columns: [
+    { label: 'FriendlyName', width: 14, value: 'FriendlyName' }, { label: 'OperationalStatus', width: 17, value: 'OperationalStatus' }, { label: 'HealthStatus', width: 12, value: 'HealthStatus' },
+    { label: 'IsPrimordial', width: 12, value: 'IsPrimordial' }, { label: 'IsReadOnly', width: 10, value: 'IsReadOnly' }, { label: 'Size', width: 8, align: 'right', value: o => shortSize(o.Size) },
+    { label: 'AllocatedSize', align: 'right', value: o => shortSize(o.AllocatedSize) }] } });
+  const vdObj = v => psobj(T_VD, {
+    FriendlyName: v.name, ResiliencySettingName: v.layout, FaultDomainRedundancy: v.redundancy, OperationalStatus: v.operationalStatus, HealthStatus: v.healthStatus, Size: v.size,
+    FootprintOnPool: v.footprint, StorageEfficiency: (v.efficiency * 100).toFixed(2) + '%', AllocatedSize: v.allocated, NumberOfDataCopies: v.copies, PhysicalDiskRedundancy: v.redundancy,
+    NumberOfColumns: v.columns, ProvisioningType: v.provisioning, UniqueId: v.uniqueId, IsManualAttach: false, IsSnapshot: false, Usage: 'Data', DetachedReason: v.operationalStatus === 'Detached' ? 'Majority Disks Unhealthy' : 'None'
+  }, { str: v.name });
+  view(T_VD, { table: { columns: [
+    { label: 'FriendlyName', width: 12, value: 'FriendlyName' }, { label: 'ResiliencySettingName', width: 21, value: 'ResiliencySettingName' }, { label: 'FaultDomainRedundancy', width: 21, value: 'FaultDomainRedundancy' },
+    { label: 'OperationalStatus', width: 17, value: 'OperationalStatus' }, { label: 'HealthStatus', width: 12, value: 'HealthStatus' }, { label: 'Size', width: 7, align: 'right', value: o => shortSize(o.Size) },
+    { label: 'FootprintOnPool', width: 15, align: 'right', value: o => shortSize(o.FootprintOnPool) }, { label: 'StorageEfficiency', align: 'right', value: 'StorageEfficiency' }] } });
+  const ssObj = () => psobj(T_SS, { FriendlyName: ssName(), HealthStatus: 'Healthy', OperationalStatus: 'OK', Model: 'Windows Storage', Manufacturer: 'Microsoft Corporation', UniqueId: '{S:' + WS.sys.name + '}' }, { str: ssName() });
+  view(T_SS, { table: { columns: [{ label: 'FriendlyName', width: 30, value: 'FriendlyName' }, { label: 'HealthStatus', width: 12, value: 'HealthStatus' }, { label: 'OperationalStatus', value: 'OperationalStatus' }] } });
+  const spErr = (ctx, r, cls) => cimError(ctx, r.error, { cls, ns: NS_ST, code: r.code === 'NotEnoughSpace' || r.code === 'NotEnoughDisks' ? 40001 : r.code === 'Exists' ? 41000 : r.code === 'InUse' ? 49000 : 40000, category: r.code === 'NotFound' ? 'ObjectNotFound' : 'InvalidOperation' });
+  /** -PhysicalDisks objects (or disk numbers) -> physical disk numbers. */
+  function pdNumbers(list) {
+    const all = WS.spaces.physicalDisks();
+    return toArray(list).map(x => (typeof x === 'number' ? x : (all.find(d => d.uniqueId === getProp(x, 'UniqueId')) || {}).number)).filter(n => n != null);
+  }
+  /** The pool a cmdlet names: -StoragePoolFriendlyName / -FriendlyName, or a piped MSFT_StoragePool. */
+  function poolArg(ctx, name, item) {
+    const n = item && /MSFT_StoragePool/.test(PS.typeName(item)) ? getProp(item, 'FriendlyName') : name;
+    if (n == null) { ctx.throw({ message: 'Cannot process command because of one or more missing mandatory parameters: StoragePoolFriendlyName.', category: 'InvalidArgument', exception: 'ParameterBindingException', id: 'MissingMandatoryParameter' }); return null; }
+    const p = WS.spaces.pool(n);
+    if (!p) { if (!/^primordial$/i.test(n)) notFound(ctx, 'MSFT_StoragePool', 'FriendlyName', n); else cimError(ctx, 'The operation is not supported on a primordial storage pool.', { cls: 'MSFT_StoragePool', ns: NS_ST, code: 1, category: 'InvalidOperation' }); return null; }
+    return p;
+  }
+  /** Virtual disks a cmdlet names: -FriendlyName (wildcards) or a piped MSFT_VirtualDisk. */
+  function vdArgs(ctx, names, item) {
+    if (item && /MSFT_VirtualDisk/.test(PS.typeName(item))) { const v = WS.spaces.space(getProp(item, 'FriendlyName')); return v ? [v] : []; }
+    const all = WS.spaces.spaces();
+    if (names == null) return all;
+    const out = [];
+    for (const n of toArray(names)) { const hit = all.filter(v => wild(n, v.name)); if (!hit.length && !hasWild(n)) notFound(ctx, 'MSFT_VirtualDisk', 'FriendlyName', n); out.push(...hit); }
+    return out;
+  }
+  const pdPipe = { type: 'object', pipe: 'value', accepts: isType(/MSFT_PhysicalDisk/) }, poolPipe = { type: 'object', pipe: 'value', accepts: isType(/MSFT_StoragePool/) }, vdPipe = { type: 'object', pipe: 'value', accepts: isType(/MSFT_VirtualDisk/) };
+
+  cmdlet({ name: 'Get-StorageSubSystem', module: ST, version: '2.0.0.0', synopsis: 'Gets one or more storage subsystem objects.', params: { FriendlyName: { type: 'string[]', pos: 0 } },
+    process(ctx, p) {
+      if (p.FriendlyName && !p.FriendlyName.some(n => wild(n, ssName()))) return notFound(ctx, 'MSFT_StorageSubSystem', 'FriendlyName', p.FriendlyName[0]);
+      ctx.out(ssObj());
+    } });
+  cmdlet({ name: 'Get-PhysicalDisk', module: ST, version: '2.0.0.0', synopsis: 'Gets a list of all PhysicalDisk objects visible across any available Storage Management Providers.',
+    params: { FriendlyName: { type: 'string[]', pos: 0 }, UniqueId: { type: 'string[]' }, CanPool: { type: 'bool' }, Usage: {}, HealthStatus: {}, DeviceNumber: { type: 'int[]' }, StoragePool: poolPipe, VirtualDisk: vdPipe },
+    process(ctx, p) {
+      let list = WS.spaces.physicalDisks();
+      if (p.StoragePool) { const name = getProp(p.StoragePool, 'FriendlyName'); list = getProp(p.StoragePool, 'IsPrimordial') ? list.filter(d => !d.pool) : list.filter(d => d.pool && d.pool.toLowerCase() === String(name).toLowerCase()); }
+      if (p.VirtualDisk) { const v = WS.spaces.space(getProp(p.VirtualDisk, 'FriendlyName')); list = v ? list.filter(d => v.disks.includes(d.number)) : []; }
+      if (p.FriendlyName) list = list.filter(d => p.FriendlyName.some(n => wild(n, d.friendlyName)));
+      if (p.UniqueId) list = list.filter(d => p.UniqueId.some(n => wild(n, d.uniqueId)));
+      if (p.DeviceNumber) list = list.filter(d => p.DeviceNumber.includes(d.number) && !d.failed);
+      if (p.CanPool != null) list = list.filter(d => d.canPool === !!p.CanPool);
+      if (p.Usage) list = list.filter(d => d.usage.toLowerCase() === String(p.Usage).toLowerCase().replace('-', ''));
+      if (p.HealthStatus) list = list.filter(d => d.healthStatus.toLowerCase() === String(p.HealthStatus).toLowerCase());
+      if (!list.length && p.FriendlyName && !p.FriendlyName.some(hasWild)) return notFound(ctx, 'MSFT_PhysicalDisk', 'FriendlyName', p.FriendlyName[0]);
+      list.forEach(d => ctx.out(pdObj(d)));
+    } });
+  cmdlet({ name: 'Set-PhysicalDisk', module: ST, version: '2.0.0.0', synopsis: 'Sets attributes on a specific physical disk.',
+    params: { InputObject: pdPipe, UniqueId: {}, FriendlyName: { pos: 0 }, Usage: { type: 'enum', values: ['AutoSelect', 'ManualSelect', 'HotSpare', 'Retired', 'Journal'] }, MediaType: { type: 'enum', values: ['Unspecified', 'HDD', 'SSD', 'SCM'] } },
+    process(ctx, p, item) {
+      let nums;
+      if (item || p.InputObject) nums = pdNumbers([item || p.InputObject]);
+      else if (p.UniqueId) nums = pdNumbers(WS.spaces.physicalDisks().filter(d => wild(p.UniqueId, d.uniqueId)).map(d => d.number));
+      else if (p.FriendlyName) { const hit = WS.spaces.physicalDisks().filter(d => wild(p.FriendlyName, d.friendlyName)); if (hit.length > 1) return cimError(ctx, 'More than one physical disk has this friendly name. Use -UniqueId or pipe the disk from Get-PhysicalDisk.', { cls: 'MSFT_PhysicalDisk', ns: NS_ST, code: 87 }); nums = hit.map(d => d.number); }
+      if (!nums || !nums.length) return notFound(ctx, 'MSFT_PhysicalDisk', p.UniqueId ? 'UniqueId' : 'FriendlyName', p.UniqueId || p.FriendlyName);
+      for (const n of nums) { const r = WS.spaces.setDisk(n, { usage: p.Usage, mediaType: p.MediaType }); if (!r.ok) spErr(ctx, r, 'MSFT_PhysicalDisk'); }
+    } });
+  cmdlet({ name: 'Get-StoragePool', module: ST, version: '2.0.0.0', synopsis: 'Gets a specific storage pool, or a set of StoragePool objects either from all storage subsystems or from a specific storage subsystem.',
+    params: { FriendlyName: { type: 'string[]', pos: 0 }, IsPrimordial: { type: 'bool' }, PhysicalDisk: pdPipe, VirtualDisk: vdPipe },
+    process(ctx, p) {
+      let list = [WS.spaces.primordial(), ...WS.spaces.pools()];
+      if (p.PhysicalDisk) { const d = WS.spaces.physicalDisk(pdNumbers([p.PhysicalDisk])[0]); list = list.filter(x => (d && d.pool ? x.name === d.pool : x.primordial)); }
+      if (p.VirtualDisk) { const v = WS.spaces.space(getProp(p.VirtualDisk, 'FriendlyName')); list = list.filter(x => v && x.name === v.pool); }
+      if (p.IsPrimordial != null) list = list.filter(x => x.primordial === !!p.IsPrimordial);
+      if (p.FriendlyName) {
+        for (const n of p.FriendlyName) if (!hasWild(n) && !list.some(x => wild(n, x.name))) notFound(ctx, 'MSFT_StoragePool', 'FriendlyName', n);
+        list = list.filter(x => p.FriendlyName.some(n => wild(n, x.name)));
+      }
+      list.forEach(x => ctx.out(poolObj(x)));
+    } });
+  cmdlet({ name: 'New-StoragePool', module: ST, version: '2.0.0.0', synopsis: 'Creates a new storage pool using a group of physical disks.',
+    params: { FriendlyName: { mandatory: true }, StorageSubSystemFriendlyName: { pos: 0 }, StorageSubSystemName: {}, StorageSubSystemUniqueId: {}, InputObject: { type: 'object', pipe: 'value', accepts: isType(/MSFT_StorageSubSystem/) },
+      PhysicalDisks: { type: 'object[]', mandatory: true }, Description: {}, ResiliencySettingNameDefault: {}, ProvisioningTypeDefault: {}, LogicalSectorSizeDefault: { type: 'long' } },
+    process(ctx, p, item) {
+      const ss = p.StorageSubSystemFriendlyName || p.StorageSubSystemName;
+      if (!item && !p.StorageSubSystemUniqueId && ss == null) ctx.throw({ message: 'Parameter set cannot be resolved using the specified named parameters.', category: 'InvalidArgument', exception: 'ParameterBindingException', id: 'AmbiguousParameterSet,New-StoragePool' });
+      if (ss != null && !wild(ss, ssName()) && !wild(ss, 'Windows Storage')) return notFound(ctx, 'MSFT_StorageSubSystem', 'FriendlyName', ss);
+      const r = WS.spaces.newPool({ name: p.FriendlyName, disks: pdNumbers(p.PhysicalDisks), description: p.Description });
+      if (!r.ok) return spErr(ctx, r, 'MSFT_StorageSubSystem');
+      ctx.out(poolObj(r.pool));
+    } });
+  cmdlet({ name: 'Set-StoragePool', module: ST, version: '2.0.0.0', params: { FriendlyName: { pos: 0 }, InputObject: poolPipe, NewFriendlyName: {}, Description: {} },
+    process(ctx, p, item) { const pool = poolArg(ctx, p.FriendlyName, item || p.InputObject); if (!pool) return; const r = WS.spaces.setPool(pool.name, { newName: p.NewFriendlyName, description: p.Description }); if (!r.ok) spErr(ctx, r, 'MSFT_StoragePool'); } });
+  cmdlet({ name: 'Remove-StoragePool', module: ST, version: '2.0.0.0', shouldProcess: true, impact: 'High', params: { FriendlyName: { pos: 0 }, InputObject: poolPipe },
+    async process(ctx, p, item) {
+      const pool = poolArg(ctx, p.FriendlyName, item || p.InputObject); if (!pool) return;
+      if (!(await ctx.confirm('Remove-StoragePool', pool.name, { impact: 'High', query: `Are you sure you want to perform this action?\nThis will remove the StoragePool "${pool.name}".` }))) return;
+      const r = WS.spaces.removePool(pool.name); if (!r.ok) spErr(ctx, r, 'MSFT_StoragePool');
+    } });
+  cmdlet({ name: 'Add-PhysicalDisk', module: ST, version: '2.0.0.0', synopsis: 'Adds a physical disk to the specified storage pool or manually assigns a physical disk to a specific virtual disk.',
+    params: { StoragePoolFriendlyName: {}, InputObject: poolPipe, PhysicalDisks: { type: 'object[]', mandatory: true }, Usage: { type: 'enum', values: ['AutoSelect', 'ManualSelect', 'HotSpare', 'Journal'] } },
+    process(ctx, p, item) {
+      const pool = poolArg(ctx, p.StoragePoolFriendlyName, item || p.InputObject); if (!pool) return;
+      const r = WS.spaces.addDisks(pool.name, pdNumbers(p.PhysicalDisks), p.Usage); if (!r.ok) spErr(ctx, r, 'MSFT_StoragePool');
+    } });
+  cmdlet({ name: 'Remove-PhysicalDisk', module: ST, version: '2.0.0.0', shouldProcess: true, impact: 'High', params: { StoragePoolFriendlyName: {}, InputObject: poolPipe, PhysicalDisks: { type: 'object[]', mandatory: true } },
+    async process(ctx, p, item) {
+      const pool = poolArg(ctx, p.StoragePoolFriendlyName, item || p.InputObject); if (!pool) return;
+      for (const n of pdNumbers(p.PhysicalDisks)) {
+        if (!(await ctx.confirm('Remove-PhysicalDisk', `Msft Virtual Disk`, { impact: 'High', query: `Are you sure you want to perform this action?\nRemoving a physical disk will cause problems with the fault tolerance capabilities of StoragePool "${pool.name}".` }))) continue;
+        const r = WS.spaces.removeDisk(pool.name, n); if (!r.ok) spErr(ctx, r, 'MSFT_StoragePool');
+      }
+    } });
+  cmdlet({ name: 'New-VirtualDisk', module: ST, version: '2.0.0.0', synopsis: 'Creates a new virtual disk in the specified storage pool.',
+    params: { StoragePoolFriendlyName: {}, InputObject: poolPipe, FriendlyName: { mandatory: true }, ResiliencySettingName: { type: 'enum', values: ['Simple', 'Mirror', 'Parity'] },
+      NumberOfDataCopies: { type: 'int' }, PhysicalDiskRedundancy: { type: 'int' }, ProvisioningType: { type: 'enum', values: ['Thin', 'Fixed'] }, Size: { type: 'uint64' }, UseMaximumSize: { type: 'switch' },
+      NumberOfColumns: { type: 'int' }, Interleave: { type: 'long' }, StorageTiers: { type: 'object[]' }, StorageTierSizes: { type: 'object[]' } },
+    process(ctx, p, item) {
+      const pool = poolArg(ctx, p.StoragePoolFriendlyName, item || p.InputObject); if (!pool) return;
+      if (p.StorageTiers) return cimError(ctx, 'Storage tiers are not available in the lab simulator.', { cls: 'MSFT_StoragePool', ns: NS_ST, code: 1, category: 'NotImplemented' });
+      if (!p.Size && !p.UseMaximumSize) ctx.throw({ message: 'Parameter set cannot be resolved using the specified named parameters.', category: 'InvalidArgument', exception: 'ParameterBindingException', id: 'AmbiguousParameterSet,New-VirtualDisk' });
+      const layout = p.ResiliencySettingName || 'Mirror';
+      const red = layout === 'Mirror' ? (p.NumberOfDataCopies ? p.NumberOfDataCopies - 1 : p.PhysicalDiskRedundancy || 1) : layout === 'Parity' ? p.PhysicalDiskRedundancy || 1 : 0;
+      const r = WS.spaces.newSpace({ pool: pool.name, name: p.FriendlyName, layout, redundancy: red, provisioning: p.ProvisioningType || 'Fixed', size: p.UseMaximumSize ? 'max' : p.Size });
+      if (!r.ok) return spErr(ctx, r, 'MSFT_StoragePool');
+      ctx.out(vdObj(r.space));
+    } });
+  cmdlet({ name: 'Get-VirtualDisk', module: ST, version: '2.0.0.0', synopsis: 'Returns a list of VirtualDisk objects, across all storage pools, across all providers, or optionally a filtered subset based on provided criteria.',
+    params: { FriendlyName: { type: 'string[]', pos: 0 }, StoragePool: poolPipe, PhysicalDisk: pdPipe, Disk: { type: 'object', pipe: 'value', accepts: isType(/MSFT_Disk/) } },
+    process(ctx, p) {
+      let list = vdArgs(ctx, p.FriendlyName, null);
+      if (p.StoragePool) list = list.filter(v => v.pool.toLowerCase() === String(getProp(p.StoragePool, 'FriendlyName')).toLowerCase());
+      if (p.PhysicalDisk) { const n = pdNumbers([p.PhysicalDisk])[0]; list = list.filter(v => v.disks.includes(n)); }
+      if (p.Disk) list = list.filter(v => v.disk === getProp(p.Disk, 'Number'));
+      list.forEach(v => ctx.out(vdObj(v)));
+    } });
+  cmdlet({ name: 'Remove-VirtualDisk', module: ST, version: '2.0.0.0', shouldProcess: true, impact: 'High', params: { FriendlyName: { type: 'string[]', pos: 0 }, InputObject: vdPipe },
+    async process(ctx, p, item) {
+      for (const v of vdArgs(ctx, p.FriendlyName, item || p.InputObject)) {
+        if (!(await ctx.confirm('Remove-VirtualDisk', v.name, { impact: 'High', query: `Are you sure you want to perform this action?\nThis will remove the VirtualDisk "${v.name}".` }))) continue;
+        const r = WS.spaces.removeSpace(v.name); if (!r.ok) spErr(ctx, r, 'MSFT_VirtualDisk');
+      }
+    } });
+  cmdlet({ name: 'Resize-VirtualDisk', module: ST, version: '2.0.0.0', params: { FriendlyName: { pos: 0 }, InputObject: vdPipe, Size: { type: 'uint64', mandatory: true } },
+    process(ctx, p, item) { for (const v of vdArgs(ctx, p.FriendlyName, item || p.InputObject)) { const r = WS.spaces.resizeSpace(v.name, p.Size); if (!r.ok) spErr(ctx, r, 'MSFT_VirtualDisk'); } } });
+  cmdlet({ name: 'Repair-VirtualDisk', module: ST, version: '2.0.0.0', synopsis: 'Repairs a virtual disk.', params: { FriendlyName: { type: 'string[]', pos: 0 }, InputObject: vdPipe, AsJob: { type: 'switch' } },
+    async process(ctx, p, item) {
+      for (const v of vdArgs(ctx, p.FriendlyName, item || p.InputObject)) {
+        ctx.progress({ activity: 'Repair-VirtualDisk', status: `Repairing ${v.name}`, percent: 50 });
+        await ctx.sleep(300);
+        const r = WS.spaces.repair(v.name); if (!r.ok) spErr(ctx, r, 'MSFT_VirtualDisk');
+      }
+    } });
+  cmdlet({ name: 'Get-StorageJob', module: ST, version: '2.0.0.0', synopsis: 'Returns information about long-running Storage module jobs, such as a repair task.', params: { Name: { type: 'string[]', pos: 0 } }, process() {} });
 
   /* ================================================================ SMB */
   const SMB = 'SmbShare';

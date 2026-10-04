@@ -315,7 +315,23 @@
     if (a.path && a.letter !== undefined && v.letter !== (a.letter ? String(a.letter).toUpperCase() : null)) return false;
     if (a.hasLetter != null && !!v.letter !== !!a.hasLetter) return false;
     if (a.minSizeGB && v.size < a.minSizeGB * WS.storage.GB * 0.99) return false;
-    return fieldsMatch(v, a, ['letter', 'minSizeGB', 'path', 'hasLetter']);
+    if (a.virtualDisk && !same((WS.spaces.spaceOfDisk(v.disk) || {}).name, a.virtualDisk)) return false; // the volume is on that Storage Spaces virtual disk
+    return fieldsMatch(v, a, ['letter', 'minSizeGB', 'path', 'hasLetter', 'virtualDisk']);
+  });
+  // Storage Spaces: minDisks = at least that many physical disks; hotSpares = exactly that many Hot Spare disks
+  helper('storagePool', a => {
+    const p = WS.spaces.pool(a.name);
+    if (!p) return false;
+    if (a.minDisks != null && p.disks.length < a.minDisks) return false;
+    if (a.hotSpares != null && WS.spaces.physicalDisks().filter(d => same(d.pool, p.name) && d.usage === 'HotSpare').length !== a.hotSpares) return false;
+    return fieldsMatch(p, a, ['name', 'minDisks', 'hotSpares']);
+  });
+  // layout Simple|Mirror|Parity, copies (mirror 2/3), redundancy, provisioning Fixed|Thin, pool, operationalStatus, minSizeGB
+  helper('virtualDisk', a => {
+    const v = WS.spaces.space(a.name);
+    if (!v) return false;
+    if (a.minSizeGB && v.size < a.minSizeGB * WS.storage.GB * 0.99) return false;
+    return fieldsMatch(v, a, ['name', 'minSizeGB']);
   });
   helper('disk', a => { const d = WS.storage.disks().find(x => x.number === +a.number); return !!d && fieldsMatch(d, a, ['number']); });
   helper('firewallRule', a => {

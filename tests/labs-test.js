@@ -38,7 +38,7 @@
   try {
     await wait(250);
     if (new URLSearchParams(location.search).get('shot') === 'guide') { WS.apps.launch('lab'); await wait(200); console.log('RESULT 0 passed, 0 failed'); return; }
-    t('built-in labs are registered', ['lab01-initial-config', 'lab02-adds-forest', 'lab03-ad-objects', 'lab04-dns', 'lab05-dhcp', 'lab06-storage-shares', 'lab07-iis', 'lab09-services-events', 'lab11-firewall', 'lab12-file-server', 'lab13-group-policy', 'lab14-task-manager', 'lab15-hyperv', 'lab16-drive-maps', 'lab17-mount-points'].every(id => L.get(id)));
+    t('built-in labs are registered', ['lab01-initial-config', 'lab02-adds-forest', 'lab03-ad-objects', 'lab04-dns', 'lab05-dhcp', 'lab06-storage-shares', 'lab07-iis', 'lab09-services-events', 'lab11-firewall', 'lab12-file-server', 'lab13-group-policy', 'lab14-task-manager', 'lab15-hyperv', 'lab16-drive-maps', 'lab17-mount-points', 'lab18-storage-spaces'].every(id => L.get(id)));
     t('new check helpers are available', ['dnsForwarders', 'conditionalForwarder', 'dhcpFilter', 'dhcpLease', 'eventLog', 'customView', 'gpo', 'gpLink', 'gpoSetting', 'gpInheritance', 'gpoPermission', 'domainPasswordPolicy', 'gpoBackup', 'gpApplied', 'wmiFilter', 'iisSite', 'iisAppPool', 'iisDefaultDoc', 'http', 'vmSwitch', 'vm', 'vhd'].every(h => L.helpers().includes(h)));
 
     // Lab 01: the network objectives (the rename/workgroup/restart ones are covered by the Server Manager suite).
@@ -314,6 +314,19 @@
     t('Lab 17 stale path objective completes', !open().includes('stale'), open());
     await ps(['Set-Partition -DiskNumber 2 -PartitionNumber 3 -NewDriveLetter S', 'Set-Volume -DriveLetter S -NewFileSystemLabel Scratch']);
     finished('Lab 17');
+
+    await begin('lab18-storage-spaces');
+    t('Lab 18 starts with nothing done and five poolable disks', open().join() === 'pool,mirror,volume,thin,spare' && WS.spaces.primordial().poolable.length === 6, open());
+    await ps(['New-StoragePool -FriendlyName DataPool -StorageSubSystemFriendlyName "Windows Storage*" -PhysicalDisks (Get-PhysicalDisk -CanPool $true | Where-Object Size -eq 20GB)']);
+    t('Lab 18 pool objective completes', !open().includes('pool'), open());
+    await ps(['New-VirtualDisk -StoragePoolFriendlyName DataPool -FriendlyName Finance -ResiliencySettingName Mirror -NumberOfDataCopies 2 -ProvisioningType Fixed -Size 20GB']);
+    t('Lab 18 mirror objective completes', !open().includes('mirror'), open());
+    await ps(['Get-VirtualDisk Finance | Get-Disk | Initialize-Disk -PartitionStyle GPT -PassThru | New-Partition -DriveLetter F -UseMaximumSize | Format-Volume -FileSystem NTFS -NewFileSystemLabel Finance -Confirm:$false']);
+    t('Lab 18 volume objective completes', !open().includes('volume'), open());
+    await ps(['New-VirtualDisk -StoragePoolFriendlyName DataPool -FriendlyName Scratch -ResiliencySettingName Simple -ProvisioningType Thin -Size 100GB']);
+    t('Lab 18 thin objective completes', !open().includes('thin'), open());
+    await ps(['Add-PhysicalDisk -StoragePoolFriendlyName DataPool -PhysicalDisks (Get-PhysicalDisk -CanPool $true | Where-Object Size -eq 30GB) -Usage HotSpare']);
+    finished('Lab 18');
 
     // Undo: step snapshots and going back to one (Lab 16, through the model).
     await begin('lab16-drive-maps');

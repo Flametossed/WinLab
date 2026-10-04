@@ -57,12 +57,12 @@
   const volSort = (x, y, a, b) => volKey(a.v).localeCompare(volKey(b.v));
   const volumeRows = () => S.volumes().map(v => ({ id: `vol:${v.disk}:${v.partition}`, v, volume: volName(v), status: '', label: v.label || '', prov: 'Fixed',
     capacity: v.size, free: formatted(v) ? v.free : 0, pct: formatted(v) ? Math.round(v.used / v.size * 100) : 0 }));
-  const diskRows = () => S.disks().map(d => ({ id: 'disk:' + d.number, d, number: d.number, vdisk: '', status: d.online ? 'Online' : 'Offline', capacity: d.size,
+  const diskRows = () => S.disks().map(d => ({ id: 'disk:' + d.number, d, number: d.number, vdisk: d.space ? (WS.spaces.spaceOfDisk(d.number) || {}).name || '' : '', status: d.online ? 'Online' : 'Offline', capacity: d.size,
     unalloc: d.style === 'RAW' ? d.size : d.unallocated, partition: d.style === 'RAW' ? 'Unknown' : d.style, ro: d.readOnly ? '✓' : '', clustered: '', subsystem: 'Windows Storage',
-    bus: 'SCSI', name: d.model || 'Msft Virtual Disk' }));
+    bus: d.space ? 'Spaces' : 'SCSI', name: d.model || 'Msft Virtual Disk' }));
   const shareRows = () => WS.smb.shares().filter(s => !s.special).map(s => ({ id: 'share:' + s.name, s, share: s.name, path: s.path, protocol: 'SMB', avail: 'Not Clustered' }));
-  /** Disks Storage Spaces can pool: not the system disk and no partitions (an MSR alone does not count). */
-  const poolable = () => S.disks().filter(d => !d.boot && !d.partitions.some(p => p.type !== 'Reserved'));
+  /** Disks Storage Spaces can pool (WS.spaces decides: not the system disk, no partitions besides an MSR, not a virtual disk). */
+  const poolable = () => S.disks().filter(d => (WS.spaces.physicalDisk(d.number) || {}).canPool);
   const volumeOfPath = path => { const m = /^([A-Z]):/i.exec(path || ''); return m ? S.volume(m[1]) : null; };
 
   /* ================================================================ tiles */
@@ -159,8 +159,12 @@
         emptyText: !d ? 'Select a disk to display its volumes.' : !d.online ? 'The disk is offline.' : 'No related volumes exist.',
         tasks: () => [{ label: 'New Volume...', disabled: !d, action: () => newVolume({ disk: d.number }) }] }).el);
       const inPool = d && poolable().some(x => x.number === d.number);
+      const sp = d && d.space ? WS.spaces.poolOfDisk(d.number) : null;
+      const kvs = rows => h('div.kv', ...rows.flatMap(([k, v]) => [h('span.k', k), h('span', v)]));
       poolHost.appendChild(cardTile('STORAGE POOL', d ? `Disk ${d.number} on ${server()}` : '', !d ? h('div.fss-note', 'Select a disk to display its storage pool.')
-        : inPool ? h('div.fss-card', h('div.hd', 'Primordial'), h('div.kv', ...[['Type:', 'Available Disks'], ['Managed by:', server()], ['Available to:', server()]].flatMap(([k, v]) => [h('span.k', k), h('span', v)])))
+        : sp ? h('div.fss-card', { dataset: { field: 'pool-card' } }, h('div.hd', sp.name), h('div.bar', h('div.fill', { style: { width: Math.round(sp.allocated / sp.size * 100) + '%' } })),
+          kvs([['Type:', 'Storage Pool'], ['Capacity:', size(sp.size)], ['Free Space:', size(sp.free)], ['Status:', sp.operationalStatus], ['Managed by:', server()]]))
+        : inPool ? h('div.fss-card', h('div.hd', 'Primordial'), kvs([['Type:', 'Available Disks'], ['Managed by:', server()], ['Available to:', server()]]))
           : h('div.fss-note', 'No related storage pool exists.')));
     };
     const t = tile({ title: 'DISKS', key: 'disks', sub: n => `All disks | ${n} total`, rows: diskRows, sortKey: 'number',
@@ -178,33 +182,7 @@
     restore(t, 'disks', paint);
   }
 
-  function poolsPage(c) {
-    const vdHost = h('div'), pdHost = h('div');
-    const notBuilt = () => WS.apps.notImplemented('New Storage Pool Wizard');
-    const paint = r => {
-      U.clear(vdHost); U.clear(pdHost);
-      vdHost.appendChild(noteTile('VIRTUAL DISKS', r ? `Primordial on ${server()}` : '', !r ? 'Select a storage pool to display its virtual disks.'
-        : ['No related virtual disks exist.\nTo create a virtual disk, ', link('start the New Virtual Disk Wizard', () => WS.apps.notImplemented('New Virtual Disk Wizard')), '.']));
-      const disks = r ? poolable() : [];
-      pdHost.appendChild(tile({ title: 'PHYSICAL DISKS', sub: () => (r ? `Primordial on ${server()}` : ''), rows: () => disks.map(d => ({ id: 'pd:' + d.number, slot: '', name: `${d.model || 'Msft Virtual Disk'} (${server()})`,
-        status: 'OK', capacity: d.size, bus: 'SCSI', usage: 'Auto-Select', chassis: `Integrated : Adapter 0 : Port 0 : Target 0 : LUN ${d.number}`, media: 'Unspecified', rpm: '' })),
-      filter: false, height: 130, groupLabel: () => `Primordial (${disks.length})`, icon: () => WS.diskmgmt.ICON.disk, sortKey: 'name',
-      columns: [{ key: 'slot', label: 'Slot', width: 40 }, { key: 'name', label: 'Name', width: 190 }, { key: 'status', label: 'Status', width: 50 },
-        { key: 'capacity', label: 'Capacity', width: 75, type: 'num', align: 'right', render: x => size(x.capacity) }, { key: 'bus', label: 'Bus', width: 50 }, { key: 'usage', label: 'Usage', width: 85 },
-        { key: 'chassis', label: 'Chassis', width: 260 }, { key: 'media', label: 'Media Type', width: 85 }, { key: 'rpm', label: 'RPM', width: 50 }],
-      emptyText: r ? 'No physical disks are available.' : 'Select a storage pool to display its physical disks.' }).el);
-    };
-    const rows = () => { const d = poolable(); return d.length ? [{ id: 'pool:primordial', name: 'Primordial', type: 'Available Disks', managedBy: server(), availableTo: server(), rw: '', capacity: d.reduce((a, x) => a + x.size, 0), free: '', alloc: '', status: '' }] : []; };
-    const t = tile({ title: 'STORAGE POOLS', key: 'pools', sub: n => `Storage Spaces | ${n} total`, rows, sortKey: 'name', groupLabel: list => `Windows Storage (${server()}) (${list.length})`,
-      icon: () => WS.diskmgmt.ICON.app, emptyText: 'No storage pools exist.',
-      columns: [{ key: 'name', label: 'Name', width: 140 }, { key: 'type', label: 'Type', width: 110 }, { key: 'managedBy', label: 'Managed by', width: 100 }, { key: 'availableTo', label: 'Available to', width: 100 },
-        { key: 'rw', label: 'Read-Write Server', width: 120 }, { key: 'capacity', label: 'Capacity', width: 80, type: 'num', align: 'right', render: r => size(r.capacity) },
-        { key: 'free', label: 'Free Space', width: 80 }, { key: 'alloc', label: 'Percent Allocated', width: 120 }, { key: 'status', label: 'Status', width: 70 }],
-      menu: () => [{ label: 'New Storage Pool...', action: notBuilt }], onSelect: paint,
-      tasks: () => [{ label: 'New Storage Pool...', action: notBuilt }, { label: 'Rescan Storage', action: () => rescan(c) }, SEP, { label: 'Refresh', action: c.render }] });
-    c.content.append(t.el, h('div.fss-lower', vdHost, pdHost));
-    restore(t, 'pools', paint);
-  }
+  function poolsPage(c) { WS.smspaces.page(c); }
 
   function sharesPage(c) {
     const quotaHost = h('div'), volHost = h('div');
@@ -905,7 +883,9 @@
   const RENDER = { servers: serversPage, volumes: volumesPage, disks: disksPage, pools: poolsPage, shares: sharesPage, iscsi: iscsiPage, workfolders: workFoldersPage };
   function render(sub, c) { (RENDER[sub] || serversPage)(c); }
 
-  WS.smfss = { render, subnav, crumbs, PAGES, selection, size, extendVolume, volumeProperties, manageAccessPaths, advancedSecurity, bringOnline, takeOffline, initialize, resetDisk, stopSharing, scanVolume,
+  /** Building blocks for the other File and Storage Services pages (sm-spaces.js). */
+  const ui = { tile, restore, noteTile, cardTile, kv, size, pctBar, field, err, ask, link, results, formDialog, parseSize, floor2, server, SEP, selection, UNIT };
+  WS.smfss = { ui, render, subnav, crumbs, PAGES, selection, size, extendVolume, volumeProperties, manageAccessPaths, advancedSecurity, bringOnline, takeOffline, initialize, resetDisk, stopSharing, scanVolume,
     menus: { volume: volumeMenu, disk: diskMenu, share: shareMenu }, rows: { volumes: volumeRows, disks: diskRows, shares: shareRows } };
   Object.assign(WS.sm, { newVolume, newShare, shareProperties });
 })();

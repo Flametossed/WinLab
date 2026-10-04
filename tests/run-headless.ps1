@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'term', 'model', 'ui', 'sm', 'aduc', 'dns', 'dhcp', 'evt', 'disk', 'comp', 'fw', 'net', 'explorer', 'fss', 'gpo', 'tm', 'labs', 'shell', 'settings', 'iis', 'hv', 'gpp', 'snap', 'mount')][string]$Test = 'all',
+  [ValidateSet('all', 'term', 'model', 'ui', 'sm', 'aduc', 'dns', 'dhcp', 'evt', 'disk', 'comp', 'fw', 'net', 'explorer', 'fss', 'gpo', 'tm', 'labs', 'shell', 'settings', 'iis', 'hv', 'gpp', 'snap', 'mount', 'spaces')][string]$Test = 'all',
   # Screenshot mode passed to the page as &shot=<name> (each test file lists its modes). Needs a single -Test.
   [string]$Shot = ''
 )
@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 $browser = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
 if (!(Test-Path -LiteralPath $browser)) { $browser = 'C:\Program Files\Google\Chrome\Application\chrome.exe' }
 if (!(Test-Path -LiteralPath $browser)) { throw 'Install Edge or Chrome to run the headless tests.' }
-$tests = if ($Test -eq 'all') { @('term', 'model', 'ui', 'sm', 'aduc', 'dns', 'dhcp', 'evt', 'disk', 'comp', 'fw', 'net', 'explorer', 'fss', 'gpo', 'tm', 'labs', 'shell', 'settings', 'iis', 'hv', 'gpp', 'snap', 'mount') } else { @($Test) }
+$tests = if ($Test -eq 'all') { @('term', 'model', 'ui', 'sm', 'aduc', 'dns', 'dhcp', 'evt', 'disk', 'comp', 'fw', 'net', 'explorer', 'fss', 'gpo', 'tm', 'labs', 'shell', 'settings', 'iis', 'hv', 'gpp', 'snap', 'mount', 'spaces') } else { @($Test) }
 if ($Shot -and $tests.Count -ne 1) { throw 'Use -Shot with a single -Test suite.' }
 if ($Shot -and $Shot -notmatch '^[\w-]+$') { throw 'Shot names are letters, digits, - and _.' }
 $failed = $false

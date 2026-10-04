@@ -170,6 +170,15 @@
 .fss-props .pg { padding: 4px 16px; overflow: auto; }
 .fss-props .pg h4 { margin: 0 0 10px; font-size: 15px; font-weight: 400; }
 .fss-volprops { height: 380px; }
+.fss-pdscroll { max-height: 260px; overflow: auto; border: 1px solid #d6d6d6; background: #fff; }
+.fss-pdtable { border-collapse: collapse; width: 100%; background: #fff; }
+.fss-pdtable th { text-align: left; font-weight: 400; color: #555; border-bottom: 1px solid #d6d6d6; padding: 4px 8px; white-space: nowrap; }
+.fss-pdtable td { padding: 3px 8px; white-space: nowrap; }
+.fss-pdtable td.num { text-align: right; }
+.fss-pdtable tr.sel td { background: #cfe3f8; }
+.fss-layout { display: grid; grid-template-columns: 200px 1fr; gap: 16px; }
+.fss-layoutlist { display: flex; flex-direction: column; gap: 8px; border: 1px solid #d6d6d6; background: #fff; padding: 8px; align-self: start; }
+.fss-layoutdesc { color: #333; margin-top: 4px; line-height: 1.4; }
 .fss-volprops .frow { margin: 0 0 10px 12px; }
 .fss-volprops .frow .flabel { color: #555; }
 .fss-usage { display: flex; align-items: center; gap: 10px; margin: 0 0 0 12px; max-width: 420px; }

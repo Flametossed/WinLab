@@ -7,6 +7,8 @@
  *        id: a stable id, given when the volume is first mounted in a folder; the mount point folder (a WS.fs node with
  *        .mount = id) is the only record of a folder access path, so renaming or removing the folder changes the paths. 
  *        storage.cdrom = { letter, media }. Sizes are bytes.
+ *        Storage Spaces (js/model/spaces.js) adds disk.pool (a physical disk in a pool: hidden, like Get-Disk hides it),
+ *        disk.space (the disk of a virtual disk) and disk.detached (a virtual disk that lost too many physical disks).
  * Every lettered, formatted volume gets its administrative share (E$, "Default share") in WS.smb, as the Server service does. */
 (function () {
   'use strict';
@@ -33,7 +35,9 @@
   });
 
   const S = () => WS.state.storage;
-  const disk = n => S().disks.find(d => d.number === +n) || null;
+  /** Disks the OS sees: not the physical disks in a storage pool, and not detached virtual disks. */
+  const visible = d => !d.pool && !d.detached;
+  const disk = n => S().disks.find(d => d.number === +n && visible(d)) || null;
   const noDisk = n => ({ ok: false, code: 'NotFound', error: `No MSFT_Disk objects found with property 'Number' equal to '${n}'. Verify the value of the property and retry.` });
   const usedLetters = () => new Set([...S().disks.flatMap(d => d.partitions.map(p => p.letter)).filter(Boolean), S().cdrom && S().cdrom.letter].filter(Boolean));
   const freeLetters = () => 'CDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter(l => !usedLetters().has(l));
@@ -44,7 +48,7 @@
   /** The Server service shares the root of every fixed, formatted, lettered volume as <letter>$. */
   function syncAdminShares() {
     if (!WS.state.smb) return;
-    const want = new Set(S().disks.filter(d => d.online).flatMap(d => d.partitions.filter(p => p.letter && p.fs).map(p => p.letter)));
+    const want = new Set(S().disks.filter(d => d.online && visible(d)).flatMap(d => d.partitions.filter(p => p.letter && p.fs).map(p => p.letter)));
     const shares = WS.state.smb.shares;
     let dirty = false;
     for (const s of shares.slice()) {
@@ -133,7 +137,7 @@
   const findPart = (n, pn) => { const d = disk(n); return d ? d.partitions.find(p => p.number === +pn) || null : null; };
   function byLetter(letter) {
     letter = String(letter || '').toUpperCase().replace(/[:\\]/g, '');
-    for (const d of S().disks) for (const p of d.partitions) if (p.letter === letter) return { disk: d, part: p };
+    for (const d of S().disks) if (visible(d)) for (const p of d.partitions) if (p.letter === letter) return { disk: d, part: p };
     return null;
   }
   const isSystem = p => p.letter === 'C' || ['System', 'Recovery', 'Reserved'].includes(p.type);
@@ -223,7 +227,7 @@
   function mountTarget(id) {
     const hit = partById(id);
     if (!hit) return null;
-    if (!hit.disk.online) return 'offline';
+    if (!hit.disk.online || hit.disk.detached) return 'offline';
     return hit.part.fs ? volumeTree(hit.part) : 'raw';
   }
   /** Every mount point on the lettered drives: { partition id: ['C:\\Mount\\Data\\', ...] }. Mounts nested inside a folder-only volume are not listed. */
@@ -395,15 +399,37 @@
 
   WS.storage = {
     GB, MB,
-    disks: () => S().disks.map(d => ({ ...d, unallocated: unallocated(d), largestFree: largestFree(d).size,
+    disks: () => S().disks.filter(visible).map(d => ({ ...d, unallocated: unallocated(d), largestFree: largestFree(d).size,
       status: !d.online ? 'Offline' : d.style === 'RAW' ? 'Not Initialized' : 'Online', partitions: d.partitions.slice() })),
-    disk, volumes: () => { const idx = mountIndex(); return S().disks.filter(d => d.online).flatMap(d => d.partitions.filter(p => p.type !== 'Reserved').map(p => volumeOf(d, p, idx))); },
+    disk, volumes: () => { const idx = mountIndex(); return S().disks.filter(d => d.online && visible(d)).flatMap(d => d.partitions.filter(p => p.type !== 'Reserved').map(p => volumeOf(d, p, idx))); },
     volumeAt, volumeByPath, addAccessPath, removeAccessPath, checkAccessPath: f => { const r = checkAccessPath(f); delete r.node; return r; }, mountTarget, mountTargetPath,
     volume: letter => { const h = byLetter(letter); return h ? volumeOf(h.disk, h.part) : null; },
     byLetter, freeLetters, nextLetter, isCdrom: l => !!S().cdrom && S().cdrom.letter === String(l).toUpperCase(),
     cdrom: () => S().cdrom, freeRegions: n => freeRegions(disk(n)), usedBytes, AU, defaultAu,
     setOnline, initialize, clearDisk, newPartition, format, newVolume, deletePartition, setLetter, assignLetter, setLabel, resize, supportedSize,
     convertStyle, setActive, setCdromLetter, syncAdminShares,
+    /* ---- hooks for Storage Spaces (js/model/spaces.js) ---- */
+    /** The disk of a new virtual disk: online and RAW, numbered after every disk (pooled ones included), as Windows does. */
+    addSpaceDisk(id, size) {
+      const n = Math.max(...S().disks.map(d => d.number)) + 1;
+      S().disks.push({ number: n, model: 'Microsoft Storage Space Device', serial: id, size, style: 'RAW', online: true, readOnly: false, boot: false, partitions: [], space: id });
+      changed();
+      return n;
+    },
+    /** Delete a virtual disk's disk and everything on it. */
+    removeSpaceDisk(n) {
+      const d = S().disks.find(x => x.number === +n); if (!d) return;
+      for (const p of d.partitions) { if (p.letter) WS.fs.removeDrive(p.letter); dropMounts(p); }
+      S().disks = S().disks.filter(x => x !== d);
+      changed();
+    },
+    /** A virtual disk that lost too many physical disks is detached: its disk and volumes go away until it is attached again. */
+    setDetached(n, on) {
+      const d = S().disks.find(x => x.number === +n); if (!d || !!d.detached === !!on) return;
+      if (on) { for (const p of d.partitions) unmount(p); d.detached = true; } else { delete d.detached; if (d.online) for (const p of d.partitions) mount(p); }
+      changed();
+    },
+    resizeSpaceDisk(n, size) { const d = S().disks.find(x => x.number === +n); if (d) { d.size = size; changed(); } },
     /** Labs/instructors: add another blank virtual disk (like adding a VHDX in Hyper-V). */
     addDisk(sizeGB = 20) {
       const n = Math.max(...S().disks.map(d => d.number)) + 1;

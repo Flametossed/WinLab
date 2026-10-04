@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const SUITES = ['term', 'model', 'ui', 'sm', 'aduc', 'dns', 'dhcp', 'evt', 'disk', 'comp', 'fw', 'net', 'explorer', 'fss', 'gpo', 'tm', 'labs', 'shell', 'settings', 'iis', 'hv', 'gpp', 'snap', 'mount'];
+const SUITES = ['term', 'model', 'ui', 'sm', 'aduc', 'dns', 'dhcp', 'evt', 'disk', 'comp', 'fw', 'net', 'explorer', 'fss', 'gpo', 'tm', 'labs', 'shell', 'settings', 'iis', 'hv', 'gpp', 'snap', 'mount', 'spaces'];
 const here = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(here, '..', '.test-output');
 const args = process.argv.slice(2);
